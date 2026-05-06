@@ -1,0 +1,55 @@
+name: Fultter CI
+
+on:
+    push:
+        branches:
+            - master
+            - devops-CI-foundation
+            - celyon-travel-mvp
+            - ceylon-travel-mvp
+            - devops-CI-foundation
+
+    pull_request:
+        branches:
+            -  master
+            - devops-CI-foundation
+            - celyon-travel-mvp
+            - ceylon-travel-mvp
+
+
+jobs:
+    flutter-ci:
+        name: Analyze, test, and build Flutter app
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout respository
+              uses: actions/checkout@v5
+
+            - name: Set up Flutter
+              uses: subosito/flutter-action@v2
+              with:
+                flutter-version: '3.41.7'
+                channel: 'stable'
+                cache: true
+            - name: Show Flutter version
+              run: flutter --version
+            
+            - name: Install dependencies
+              run: flutter pub get
+
+            - name: Analyze code
+              run: flutter analyze
+
+            - name: Run tests
+              run: flutter test
+
+            - name: Build web app
+              run: flutter build web --release
+
+            - name: Upload web build artifact
+              uses: actions/uopload-artifact@v7
+              with:
+                name: caylon-travel-web-build
+                path: build/web
+
