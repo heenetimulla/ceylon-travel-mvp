@@ -48,7 +48,7 @@ jobs:
               run: flutter build web --release
 
             - name: Upload web build artifact
-              uses: actions/uopload-artifact@v7
+              uses: actions/upload-artifact@v7
               with:
                 name: caylon-travel-web-build
                 path: build/web
