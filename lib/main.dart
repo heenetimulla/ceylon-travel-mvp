@@ -315,11 +315,14 @@ class AccountTypeScreen extends StatelessWidget {
 
     switch (type) {
       case AccountType.tourist:
-        screen = const TouristHomeScreen();
+        screen = const UserRegistrationScreen();
+        break;
       case AccountType.driver:
-        screen = const DriverHomeScreen();
+        screen = const DriverRegistrationScreen();
+        break;
       case AccountType.admin:
         screen = const AdminDashboardScreen();
+        break;
     }
 
     Navigator.pushReplacement(
@@ -425,6 +428,273 @@ class AccountTypeCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class UserRegistrationScreen extends StatefulWidget {
+  const UserRegistrationScreen({super.key});
+
+  @override
+  State<UserRegistrationScreen> createState() => _UserRegistrationScreenState();
+}
+
+class _UserRegistrationScreenState extends State<UserRegistrationScreen> {
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController phoneController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController cityController = TextEditingController();
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    phoneController.dispose();
+    emailController.dispose();
+    cityController.dispose();
+    super.dispose();
+  }
+
+  void _createUserAccount() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const TouristHomeScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('User Registration'),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Create tourist/customer profile',
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'This is UI only. Firebase saving will be added in Week 3.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 22),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Full name',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone number',
+                      prefixIcon: Icon(Icons.phone_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Email optional for MVP',
+                      prefixIcon: Icon(Icons.email_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: cityController,
+                    decoration: const InputDecoration(
+                      labelText: 'City / District',
+                      prefixIcon: Icon(Icons.location_city_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _createUserAccount,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: Text('Create User Account'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DriverRegistrationScreen extends StatefulWidget {
+  const DriverRegistrationScreen({super.key});
+
+  @override
+  State<DriverRegistrationScreen> createState() => _DriverRegistrationScreenState();
+}
+
+class _DriverRegistrationScreenState extends State<DriverRegistrationScreen> {
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController phoneController = TextEditingController();
+  final TextEditingController vehicleTypeController = TextEditingController();
+  final TextEditingController vehicleNumberController = TextEditingController();
+  final TextEditingController cityController = TextEditingController();
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    phoneController.dispose();
+    vehicleTypeController.dispose();
+    vehicleNumberController.dispose();
+    cityController.dispose();
+    super.dispose();
+  }
+
+  void _createDriverAccount() {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const DriverHomeScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Driver Registration'),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 620),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Create driver profile',
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'NIC upload and selfie verification will be connected later.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 22),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Driver full name',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone number',
+                      prefixIcon: Icon(Icons.phone_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: vehicleTypeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Vehicle type',
+                      hintText: 'Car / Van / SUV',
+                      prefixIcon: Icon(Icons.directions_car_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: vehicleNumberController,
+                    decoration: const InputDecoration(
+                      labelText: 'Vehicle number',
+                      prefixIcon: Icon(Icons.confirmation_number_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: cityController,
+                    decoration: const InputDecoration(
+                      labelText: 'City / Operating area',
+                      prefixIcon: Icon(Icons.map_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const UploadPlaceholder(
+                    title: 'NIC / ID upload',
+                    subtitle: 'Will upload to Firebase Storage later',
+                    icon: Icons.badge_outlined,
+                  ),
+                  const SizedBox(height: 12),
+                  const UploadPlaceholder(
+                    title: 'Selfie verification',
+                    subtitle: 'Will be reviewed by admin later',
+                    icon: Icons.camera_alt_outlined,
+                  ),
+                  const SizedBox(height: 22),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _createDriverAccount,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: Text('Create Driver Account'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class UploadPlaceholder extends StatelessWidget {
+  const UploadPlaceholder({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.white,
+      child: ListTile(
+        leading: Icon(icon, color: const Color(0xFF0F766E)),
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.upload_file),
       ),
     );
   }

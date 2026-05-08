@@ -30,6 +30,11 @@ void main() {
     await tester.tap(find.text('Tourist / Customer'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Create tourist/customer profile'), findsOneWidget);
+
+    await tester.tap(find.text('Create User Account'));
+    await tester.pumpAndSettle();
+
     expect(find.text('Tourist Dashboard'), findsWidgets);
   });
 }
