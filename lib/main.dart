@@ -703,12 +703,427 @@ class UploadPlaceholder extends StatelessWidget {
 class TouristHomeScreen extends StatelessWidget {
   const TouristHomeScreen({super.key});
 
+  void _openCreateTripPost(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CreateTripPostScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return const PlaceholderDashboard(
-      title: 'Tourist Dashboard',
-      subtitle: 'Next we will add user registration and create trip post screen.',
-      icon: Icons.person_pin_circle_outlined,
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Tourist Dashboard'),
+        actions: [
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.notifications_none),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F766E),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Need a driver for your Sri Lanka trip?',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Post your pickup, drop, passenger count, baggage, date and time. Drivers will send private bids.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF0F766E),
+                  ),
+                  onPressed: () => _openCreateTripPost(context),
+                  child: const Text('Create Trip Post'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Example open trip posts',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          const TripPostCard(
+            pickup: 'Bandaranaike Airport',
+            drop: 'Ella',
+            dateTime: '20 May 2026 • 8:30 AM',
+            passengers: '2 adults, 1 kid',
+            baggage: '3 bags',
+            status: 'OPEN',
+          ),
+          const TripPostCard(
+            pickup: 'Galle Fort',
+            drop: 'Mirissa',
+            dateTime: '22 May 2026 • 10:00 AM',
+            passengers: '4 adults',
+            baggage: '2 bags',
+            status: 'OPEN',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CreateTripPostScreen extends StatefulWidget {
+  const CreateTripPostScreen({super.key});
+
+  @override
+  State<CreateTripPostScreen> createState() => _CreateTripPostScreenState();
+}
+
+class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
+  final TextEditingController pickupController = TextEditingController();
+  final TextEditingController dropController = TextEditingController();
+  final TextEditingController notesController = TextEditingController();
+
+  DateTime? selectedDate;
+  TimeOfDay? selectedTime;
+  int adults = 1;
+  int kids = 0;
+  int baggage = 1;
+  String vehiclePreference = 'Any';
+
+  @override
+  void dispose() {
+    pickupController.dispose();
+    dropController.dispose();
+    notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final DateTime now = DateTime.now();
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+    );
+
+    if (picked == null) return;
+
+    setState(() {
+      selectedDate = picked;
+    });
+  }
+
+  Future<void> _pickTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+
+    if (picked == null) return;
+
+    setState(() {
+      selectedTime = picked;
+    });
+  }
+
+  void _postTripAdvertisement() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Demo trip post created. Firebase saving comes in Week 3.'),
+      ),
+    );
+
+    Navigator.pop(context);
+  }
+
+  String get _dateText {
+    if (selectedDate == null) return 'Select date';
+
+    final String year = selectedDate!.year.toString();
+    final String month = selectedDate!.month.toString().padLeft(2, '0');
+    final String day = selectedDate!.day.toString().padLeft(2, '0');
+
+    return '$year-$month-$day';
+  }
+
+  String _timeText(BuildContext context) {
+    if (selectedTime == null) return 'Select time';
+    return selectedTime!.format(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Create Trip Post'),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(18),
+          children: [
+            const Text(
+              'Trip advertisement',
+              style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Drivers will see this post and send private bids. Date and time must be selected from picker only.',
+              style: TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 18),
+            TextField(
+              controller: pickupController,
+              decoration: const InputDecoration(
+                labelText: 'Pickup location',
+                hintText: 'Example: Bandaranaike Airport',
+                prefixIcon: Icon(Icons.my_location_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: dropController,
+              decoration: const InputDecoration(
+                labelText: 'Drop location',
+                hintText: 'Example: Ella',
+                prefixIcon: Icon(Icons.location_on_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickDate,
+                    icon: const Icon(Icons.calendar_month_outlined),
+                    label: Text(_dateText),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickTime,
+                    icon: const Icon(Icons.access_time),
+                    label: Text(_timeText(context)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            CounterRow(
+              label: 'Adults',
+              value: adults,
+              onMinus: () {
+                if (adults <= 1) return;
+                setState(() => adults--);
+              },
+              onPlus: () => setState(() => adults++),
+            ),
+            CounterRow(
+              label: 'Kids',
+              value: kids,
+              onMinus: () {
+                if (kids <= 0) return;
+                setState(() => kids--);
+              },
+              onPlus: () => setState(() => kids++),
+            ),
+            CounterRow(
+              label: 'Baggage',
+              value: baggage,
+              onMinus: () {
+                if (baggage <= 0) return;
+                setState(() => baggage--);
+              },
+              onPlus: () => setState(() => baggage++),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: vehiclePreference,
+              decoration: const InputDecoration(
+                labelText: 'Vehicle preference',
+                prefixIcon: Icon(Icons.directions_car_outlined),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'Any', child: Text('Any')),
+                DropdownMenuItem(value: 'Car', child: Text('Car')),
+                DropdownMenuItem(value: 'Van', child: Text('Van')),
+                DropdownMenuItem(value: 'SUV', child: Text('SUV')),
+              ],
+              onChanged: (String? value) {
+                if (value == null) return;
+                setState(() => vehiclePreference = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesController,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Notes / special request',
+                hintText: 'Example: Need English-speaking driver',
+                prefixIcon: Icon(Icons.notes_outlined),
+              ),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: _postTripAdvertisement,
+              icon: const Icon(Icons.send),
+              label: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Text('Post Trip Advertisement'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CounterRow extends StatelessWidget {
+  const CounterRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onMinus,
+    required this.onPlus,
+  });
+
+  final String label;
+  final int value;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+            IconButton(
+              onPressed: onMinus,
+              icon: const Icon(Icons.remove_circle_outline),
+            ),
+            Text(
+              '$value',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            IconButton(
+              onPressed: onPlus,
+              icon: const Icon(Icons.add_circle_outline),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class TripPostCard extends StatelessWidget {
+  const TripPostCard({
+    super.key,
+    required this.pickup,
+    required this.drop,
+    required this.dateTime,
+    required this.passengers,
+    required this.baggage,
+    required this.status,
+  });
+
+  final String pickup;
+  final String drop;
+  final String dateTime;
+  final String passengers;
+  final String baggage;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Chip(
+              label: Text(
+                status,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: const Color(0xFFE0F2F1),
+              side: BorderSide.none,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '$pickup → $drop',
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            InfoLine(icon: Icons.calendar_month_outlined, text: dateTime),
+            InfoLine(icon: Icons.group_outlined, text: passengers),
+            InfoLine(icon: Icons.luggage_outlined, text: baggage),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class InfoLine extends StatelessWidget {
+  const InfoLine({
+    super.key,
+    required this.icon,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: Colors.black45),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

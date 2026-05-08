@@ -36,5 +36,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Tourist Dashboard'), findsWidgets);
+    await tester.tap(find.text('Create Trip Post'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trip advertisement'), findsOneWidget);
+    expect(find.text('Pickup location'), findsOneWidget);
+    expect(find.text('Drop location'), findsOneWidget);
   });
 }
