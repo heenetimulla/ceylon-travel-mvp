@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:taxi_app/main.dart';
+import 'package:taxi_app/app/ceylon_travel_app.dart';
 
 void main() {
   testWidgets('Ceylon Travel login and account type flow works', (
