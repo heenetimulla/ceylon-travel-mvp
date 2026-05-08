@@ -1,20 +1,8 @@
 name: Fultter CI
 
 on:
-    push:
-        branches:
-            - master
-            - devops-CI-foundation
-            - celyon-travel-mvp
-            - ceylon-travel-mvp
-            - devops-CI-foundation
-
-    pull_request:
-        branches:
-            -  master
-            - devops-CI-foundation
-            - celyon-travel-mvp
-            - ceylon-travel-mvp
+  push:
+  pull_request:
 
 
 jobs:
