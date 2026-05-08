@@ -1,7 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 void main() {
   runApp(const CeylonTravelApp());
+}
+
+enum AccountType {
+  tourist,
+  driver,
+  admin,
 }
 
 class CeylonTravelApp extends StatelessWidget {
@@ -18,30 +26,57 @@ class CeylonTravelApp extends StatelessWidget {
           seedColor: const Color(0xFF0F766E),
         ),
         scaffoldBackgroundColor: const Color(0xFFF6F8FA),
+        appBarTheme: const AppBarTheme(
+          centerTitle: false,
+          backgroundColor: Color(0xFFF6F8FA),
+          elevation: 0,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+        ),
       ),
       home: const SplashScreen(),
     );
   }
 }
 
-class SplashScreen extends StatelessWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
-  void _goToWelcome(BuildContext context) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-    );
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _timer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    Future.delayed(const Duration(seconds: 2), () {
-      if (context.mounted) {
-        _goToWelcome(context);
-      }
-    });
-
     return const Scaffold(
       backgroundColor: Color(0xFF0F766E),
       body: Center(
@@ -73,43 +108,57 @@ class SplashScreen extends StatelessWidget {
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
+  void _openLogin(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
+  void _openDemoFlow(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AccountTypeScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  const SizedBox(height: 30),
                   const Icon(
                     Icons.groups_2_rounded,
-                    size: 90,
+                    size: 82,
                     color: Color(0xFF0F766E),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
                   const Text(
                     'Replace travel WhatsApp groups with one smart app',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 30,
+                      fontSize: 28,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   const Text(
                     'Tourists post trips. Drivers send private bids. Tourist accepts one bid. Then they can chat, complete the trip, and rate each other.',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16, color: Colors.black54),
                   ),
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: () {},
+                      onPressed: () => _openLogin(context),
                       child: const Padding(
                         padding: EdgeInsets.symmetric(vertical: 14),
                         child: Text('Get Started'),
@@ -120,14 +169,371 @@ class WelcomeScreen extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
-                      onPressed: () {},
+                      onPressed: () => _openDemoFlow(context),
                       child: const Padding(
                         padding: EdgeInsets.symmetric(vertical: 14),
                         child: Text('View Demo Flow'),
                       ),
                     ),
                   ),
+                  const SizedBox(height: 30),
                 ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController phoneController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+
+  @override
+  void dispose() {
+    phoneController.dispose();
+    emailController.dispose();
+    super.dispose();
+  }
+
+  void _continueToAccountType() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AccountTypeScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Login'),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Continue with phone',
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Phone OTP will be connected with Firebase later. Email is optional for MVP, but required in the full system.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 28),
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone number',
+                      hintText: '+94 77 123 4567',
+                      prefixIcon: Icon(Icons.phone_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Email optional for MVP',
+                      hintText: 'name@email.com',
+                      prefixIcon: Icon(Icons.email_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _continueToAccountType,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: Text('Continue'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const LoginInfoCard(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class LoginInfoCard extends StatelessWidget {
+  const LoginInfoCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      color: Colors.white,
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, color: Color(0xFF0F766E)),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'MVP login is demo only. Week 3 will connect Firebase Auth, phone OTP, selfie verification, and NIC/ID upload.',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AccountTypeScreen extends StatelessWidget {
+  const AccountTypeScreen({super.key});
+
+  void _openDashboard(BuildContext context, AccountType type) {
+    Widget screen;
+
+    switch (type) {
+      case AccountType.tourist:
+        screen = const TouristHomeScreen();
+      case AccountType.driver:
+        screen = const DriverHomeScreen();
+      case AccountType.admin:
+        screen = const AdminDashboardScreen();
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => screen),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select account type'),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text(
+              'How will you use Ceylon Travel?',
+              style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'This decides which dashboard you will see.',
+              style: TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 22),
+            AccountTypeCard(
+              icon: Icons.person_pin_circle_outlined,
+              title: 'Tourist / Customer',
+              subtitle: 'Post trips, receive private driver bids, accept one bid, chat and rate.',
+              onTap: () => _openDashboard(context, AccountType.tourist),
+            ),
+            AccountTypeCard(
+              icon: Icons.local_taxi_outlined,
+              title: 'Driver',
+              subtitle: 'View open trip posts, submit private bids, complete trips and receive ratings.',
+              onTap: () => _openDashboard(context, AccountType.driver),
+            ),
+            AccountTypeCard(
+              icon: Icons.admin_panel_settings_outlined,
+              title: 'Admin Demo',
+              subtitle: 'Monitor users, drivers, verifications, ratings and complaints.',
+              onTap: () => _openDashboard(context, AccountType.admin),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AccountTypeCard extends StatelessWidget {
+  const AccountTypeCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.white,
+      margin: const EdgeInsets.only(bottom: 14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: const Color(0xFFE0F2F1),
+                child: Icon(icon, color: const Color(0xFF0F766E), size: 30),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class TouristHomeScreen extends StatelessWidget {
+  const TouristHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const PlaceholderDashboard(
+      title: 'Tourist Dashboard',
+      subtitle: 'Next we will add user registration and create trip post screen.',
+      icon: Icons.person_pin_circle_outlined,
+    );
+  }
+}
+
+class DriverHomeScreen extends StatelessWidget {
+  const DriverHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const PlaceholderDashboard(
+      title: 'Driver Dashboard',
+      subtitle: 'Next we will add driver registration, NIC upload placeholder and open trip posts.',
+      icon: Icons.local_taxi_outlined,
+    );
+  }
+}
+
+class AdminDashboardScreen extends StatelessWidget {
+  const AdminDashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const PlaceholderDashboard(
+      title: 'Admin Dashboard',
+      subtitle: 'Basic admin dashboard will monitor users, drivers, ratings, complaints and verifications.',
+      icon: Icons.admin_panel_settings_outlined,
+    );
+  }
+}
+
+class PlaceholderDashboard extends StatelessWidget {
+  const PlaceholderDashboard({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+
+  void _goBackToWelcome(BuildContext context) {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        actions: [
+          IconButton(
+            tooltip: 'Back to welcome',
+            onPressed: () => _goBackToWelcome(context),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Card(
+              color: Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 80, color: const Color(0xFF0F766E)),
+                    const SizedBox(height: 20),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      subtitle,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: () => _goBackToWelcome(context),
+                      child: const Text('Back to Welcome'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
