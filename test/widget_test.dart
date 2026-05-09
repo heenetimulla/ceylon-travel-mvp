@@ -47,8 +47,11 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    final Finder viewDetailsButton = find.text('View Details').first;
-    await tester.scrollUntilVisible(viewDetailsButton, 250);
+    final Finder viewDetailsButton = find
+        .widgetWithText(TextButton, 'View Details')
+        .first;
+    await tester.ensureVisible(viewDetailsButton);
+    await tester.pumpAndSettle();
     await tester.tap(viewDetailsButton);
     await tester.pumpAndSettle();
 
@@ -113,5 +116,41 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Trip Chat'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pending Trip'), findsOneWidget);
+
+    final Finder confirmCompletedButton = find.widgetWithText(
+      OutlinedButton,
+      'Confirm Completed',
+    );
+    await tester.scrollUntilVisible(confirmCompletedButton, 250);
+    await tester.tap(confirmCompletedButton);
+    await tester.pumpAndSettle();
+
+    final Finder openCompletedTripsButton = find.widgetWithText(
+      FilledButton,
+      'Open Completed Trips',
+    );
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(openCompletedTripsButton);
+    await tester.pumpAndSettle();
+    await tester.tap(openCompletedTripsButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Completed Trips'), findsOneWidget);
+
+    final Finder rateTripButton = find
+        .widgetWithText(FilledButton, 'Rate Trip')
+        .first;
+    await tester.ensureVisible(rateTripButton);
+    await tester.tap(rateTripButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rate Trip'), findsOneWidget);
+    expect(find.text('Trip summary'), findsOneWidget);
   });
 }

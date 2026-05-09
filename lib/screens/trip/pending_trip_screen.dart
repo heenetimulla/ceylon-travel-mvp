@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../core/models/bid.dart';
+import '../../core/models/completed_trip.dart';
 import '../../core/models/trip_post.dart';
 import '../../core/widgets/info_line.dart';
 import '../chat/trip_chat_screen.dart';
+import 'completed_trips_screen.dart';
 
-class PendingTripScreen extends StatelessWidget {
+class PendingTripScreen extends StatefulWidget {
   const PendingTripScreen({
     super.key,
     required this.tripPost,
@@ -15,14 +17,52 @@ class PendingTripScreen extends StatelessWidget {
   final TripPost tripPost;
   final Bid acceptedBid;
 
+  @override
+  State<PendingTripScreen> createState() => _PendingTripScreenState();
+}
+
+class _PendingTripScreenState extends State<PendingTripScreen> {
+  bool isCompletedConfirmed = false;
+
+  CompletedTrip get _completedTrip {
+    return CompletedTrip(
+      id: 'completed-${widget.acceptedBid.id}',
+      route: '${widget.tripPost.pickup} -> ${widget.tripPost.drop}',
+      driverName: widget.acceptedBid.driverName,
+      touristName: 'Tourist / Customer',
+      completedDate: widget.tripPost.dateTime,
+      acceptedBidPrice: widget.acceptedBid.price,
+      status: 'COMPLETED',
+    );
+  }
+
   void _openChat(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            TripChatScreen(tripPost: tripPost, acceptedBid: acceptedBid),
+        builder: (_) => TripChatScreen(
+          tripPost: widget.tripPost,
+          acceptedBid: widget.acceptedBid,
+        ),
       ),
     );
+  }
+
+  void _openCompletedTrips(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            CompletedTripsScreen(recentCompletedTrip: _completedTrip),
+      ),
+    );
+  }
+
+  void _confirmCompleted(BuildContext context) {
+    setState(() {
+      isCompletedConfirmed = true;
+    });
+    _showMessage(context, 'Trip Completed');
   }
 
   void _showMessage(BuildContext context, String message) {
@@ -33,6 +73,9 @@ class PendingTripScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final TripPost tripPost = widget.tripPost;
+    final Bid acceptedBid = widget.acceptedBid;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Pending Trip')),
       body: SafeArea(
@@ -187,9 +230,47 @@ class PendingTripScreen extends StatelessWidget {
               child: const Text('End Trip'),
             ),
             OutlinedButton(
-              onPressed: () => _showMessage(context, 'Trip Completed'),
+              onPressed: () => _confirmCompleted(context),
               child: const Text('Confirm Completed'),
             ),
+            if (isCompletedConfirmed) ...[
+              const SizedBox(height: 10),
+              Card(
+                color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Trip completed',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'You can now open completed trips and add the Week 2 demo rating.',
+                        style: TextStyle(color: Colors.black54),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => _openCompletedTrips(context),
+                          icon: const Icon(Icons.done_all_outlined),
+                          label: const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Text('Open Completed Trips'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             OutlinedButton(
               onPressed: () =>
                   _showMessage(context, 'Demo cancellation recorded'),

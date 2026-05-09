@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
 import '../../core/widgets/trip_post_card.dart';
+import '../trip/completed_trips_screen.dart';
 import '../trip/trip_details_screen.dart';
 import 'create_trip_post_screen.dart';
 
@@ -41,6 +42,13 @@ class TouristHomeScreen extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const CreateTripPostScreen()),
+    );
+  }
+
+  void _openCompletedTrips(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CompletedTripsScreen()),
     );
   }
 
@@ -99,6 +107,16 @@ class TouristHomeScreen extends StatelessWidget {
                   ),
                   onPressed: () => _openCreateTripPost(context),
                   child: const Text('Create Trip Post'),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white70),
+                  ),
+                  onPressed: () => _openCompletedTrips(context),
+                  icon: const Icon(Icons.done_all_outlined),
+                  label: const Text('Completed Trips'),
                 ),
               ],
             ),

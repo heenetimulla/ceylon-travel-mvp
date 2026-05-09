@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
 import '../../core/widgets/trip_post_card.dart';
+import '../trip/completed_trips_screen.dart';
 import '../trip/trip_details_screen.dart';
 import '../welcome_screen.dart';
 import 'submit_bid_screen.dart';
@@ -56,6 +57,13 @@ class DriverHomeScreen extends StatelessWidget {
     );
   }
 
+  void _openCompletedTrips(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CompletedTripsScreen()),
+    );
+  }
+
   void _openSubmitBid(BuildContext context, TripPost tripPost) {
     Navigator.push(
       context,
@@ -87,6 +95,18 @@ class DriverHomeScreen extends StatelessWidget {
           const Text(
             'Drivers choose their own bid price. Bids stay private for the tourist.',
             style: TextStyle(color: Colors.black54),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _openCompletedTrips(context),
+              icon: const Icon(Icons.done_all_outlined),
+              label: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text('Completed Trips'),
+              ),
+            ),
           ),
           const SizedBox(height: 18),
           for (final TripPost tripPost in _driverOpenTripPosts)
