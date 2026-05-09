@@ -4,6 +4,8 @@ import '../../core/models/bid.dart';
 import '../../core/models/trip_post.dart';
 import '../../core/widgets/bid_card.dart';
 import '../../core/widgets/info_line.dart';
+import '../chat/trip_chat_screen.dart';
+import '../trip/pending_trip_screen.dart';
 
 const List<Bid> _sampleBids = [
   Bid(
@@ -63,6 +65,39 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
     bids = _sampleBids;
   }
 
+  Bid? get _acceptedBid {
+    final String? bidId = acceptedBidId;
+    if (bidId == null) return null;
+
+    for (final Bid bid in bids) {
+      if (bid.id == bidId) return bid;
+    }
+
+    return null;
+  }
+
+  void _openPendingTrip(Bid acceptedBid) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PendingTripScreen(
+          tripPost: widget.tripPost,
+          acceptedBid: acceptedBid,
+        ),
+      ),
+    );
+  }
+
+  void _openChat(Bid acceptedBid) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            TripChatScreen(tripPost: widget.tripPost, acceptedBid: acceptedBid),
+      ),
+    );
+  }
+
   Future<void> _confirmAcceptBid(Bid selectedBid) async {
     final bool? shouldAccept = await showDialog<bool>(
       context: context,
@@ -107,7 +142,8 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
   @override
   Widget build(BuildContext context) {
     final TripPost tripPost = widget.tripPost;
-    final bool hasAcceptedBid = acceptedBidId != null;
+    final Bid? acceptedBid = _acceptedBid;
+    final bool hasAcceptedBid = acceptedBid != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Driver Bids')),
@@ -131,7 +167,7 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      '${tripPost.pickup} → ${tripPost.drop}',
+                      '${tripPost.pickup} -> ${tripPost.drop}',
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -195,10 +231,20 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
                         'This trip is now waiting for the next MVP step.',
                         style: TextStyle(color: Colors.black54),
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${acceptedBid.driverName} accepted at ${acceptedBid.price}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 12),
                       FilledButton(
-                        onPressed: () {},
+                        onPressed: () => _openPendingTrip(acceptedBid),
                         child: const Text('Go to Pending Trip'),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        onPressed: () => _openChat(acceptedBid),
+                        child: const Text('Open Chat'),
                       ),
                     ],
                   ),

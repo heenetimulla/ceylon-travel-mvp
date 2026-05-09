@@ -89,5 +89,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('ACCEPTED'), findsOneWidget);
+
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, 500));
+    await tester.pumpAndSettle();
+
+    final Finder pendingTripButton = find.widgetWithText(
+      FilledButton,
+      'Go to Pending Trip',
+    );
+    await tester.ensureVisible(pendingTripButton);
+    await tester.pumpAndSettle();
+    await tester.tap(pendingTripButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pending Trip'), findsOneWidget);
+
+    final Finder openChatButton = find.widgetWithText(
+      FilledButton,
+      'Open Chat',
+    );
+    await tester.scrollUntilVisible(openChatButton, 250);
+    await tester.tap(openChatButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trip Chat'), findsOneWidget);
   });
 }
