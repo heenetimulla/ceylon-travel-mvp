@@ -42,5 +42,17 @@ void main() {
     expect(find.text('Trip advertisement'), findsOneWidget);
     expect(find.text('Pickup location'), findsOneWidget);
     expect(find.text('Drop location'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    final Finder viewDetailsButton = find.text('View Details').first;
+    await tester.scrollUntilVisible(viewDetailsButton, 250);
+    await tester.tap(viewDetailsButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trip Details'), findsOneWidget);
+    expect(find.text('View Bids'), findsOneWidget);
+    expect(find.text('Bandaranaike Airport'), findsWidgets);
   });
 }

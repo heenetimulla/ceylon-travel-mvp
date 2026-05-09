@@ -1,7 +1,38 @@
 import 'package:flutter/material.dart';
 
+import '../../core/models/trip_post.dart';
 import '../../core/widgets/trip_post_card.dart';
+import '../trip/trip_details_screen.dart';
 import 'create_trip_post_screen.dart';
+
+const List<TripPost> _touristExampleTripPosts = [
+  TripPost(
+    pickup: 'Bandaranaike Airport',
+    drop: 'Ella',
+    dateTime: '20 May 2026 • 8:30 AM',
+    adults: 2,
+    kids: 1,
+    baggageCount: 3,
+    passengers: '2 adults, 1 kid',
+    baggage: '3 bags',
+    vehiclePreference: 'Van',
+    notes: 'Need an English-speaking driver with space for luggage.',
+    status: 'OPEN',
+  ),
+  TripPost(
+    pickup: 'Galle Fort',
+    drop: 'Mirissa',
+    dateTime: '22 May 2026 • 10:00 AM',
+    adults: 4,
+    kids: 0,
+    baggageCount: 2,
+    passengers: '4 adults',
+    baggage: '2 bags',
+    vehiclePreference: 'Any',
+    notes: 'Prefer a comfortable vehicle for a coastal route.',
+    status: 'OPEN',
+  ),
+];
 
 class TouristHomeScreen extends StatelessWidget {
   const TouristHomeScreen({super.key});
@@ -10,6 +41,16 @@ class TouristHomeScreen extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const CreateTripPostScreen()),
+    );
+  }
+
+  void _openTripDetails(BuildContext context, TripPost tripPost) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            TripDetailsScreen(tripPost: tripPost, showViewBids: true),
+      ),
     );
   }
 
@@ -68,22 +109,11 @@ class TouristHomeScreen extends StatelessWidget {
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          const TripPostCard(
-            pickup: 'Bandaranaike Airport',
-            drop: 'Ella',
-            dateTime: '20 May 2026 • 8:30 AM',
-            passengers: '2 adults, 1 kid',
-            baggage: '3 bags',
-            status: 'OPEN',
-          ),
-          const TripPostCard(
-            pickup: 'Galle Fort',
-            drop: 'Mirissa',
-            dateTime: '22 May 2026 • 10:00 AM',
-            passengers: '4 adults',
-            baggage: '2 bags',
-            status: 'OPEN',
-          ),
+          for (final TripPost tripPost in _touristExampleTripPosts)
+            TripPostCard(
+              tripPost: tripPost,
+              onViewDetails: () => _openTripDetails(context, tripPost),
+            ),
         ],
       ),
     );
