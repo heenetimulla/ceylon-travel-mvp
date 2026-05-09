@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taxi_app/app/ceylon_travel_app.dart';
 
@@ -54,5 +55,39 @@ void main() {
     expect(find.text('Trip Details'), findsOneWidget);
     expect(find.text('View Bids'), findsOneWidget);
     expect(find.text('Bandaranaike Airport'), findsWidgets);
+
+    final Finder viewBidsButton = find.widgetWithText(
+      OutlinedButton,
+      'View Bids',
+    );
+    await tester.ensureVisible(viewBidsButton);
+    await tester.pumpAndSettle();
+    await tester.tap(viewBidsButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Bids are private. Only you can see driver prices.'),
+      findsOneWidget,
+    );
+
+    final Finder firstAcceptBidButton = find
+        .widgetWithText(FilledButton, 'Accept Bid')
+        .first;
+    await tester.ensureVisible(firstAcceptBidButton);
+    await tester.pumpAndSettle();
+    await tester.tap(firstAcceptBidButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Accept this driver bid?'), findsOneWidget);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Accept Bid'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('ACCEPTED'), findsOneWidget);
   });
 }

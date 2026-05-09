@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
 import '../driver/submit_bid_screen.dart';
+import '../tourist/tourist_bid_list_screen.dart';
 
 class TripDetailsScreen extends StatelessWidget {
   const TripDetailsScreen({
@@ -19,6 +20,15 @@ class TripDetailsScreen extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => SubmitBidScreen(tripPost: tripPost)),
+    );
+  }
+
+  void _openBidList(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TouristBidListScreen(tripPost: tripPost),
+      ),
     );
   }
 
@@ -105,7 +115,7 @@ class TripDetailsScreen extends StatelessWidget {
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
-                            onPressed: () {},
+                            onPressed: () => _openBidList(context),
                             icon: const Icon(Icons.visibility_outlined),
                             label: const Padding(
                               padding: EdgeInsets.symmetric(vertical: 12),
