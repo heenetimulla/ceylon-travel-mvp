@@ -46,6 +46,7 @@ Used to add DevOps-related files such as:
 
 \- README improvements
 
+\- feature/unified-registration-driver-posts
 
 
 \### ceylon-travel-mvp
