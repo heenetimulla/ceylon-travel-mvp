@@ -11,12 +11,12 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController phoneController = TextEditingController();
-  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
 
   @override
   void dispose() {
     phoneController.dispose();
-    emailController.dispose();
+    passwordController.dispose();
     super.dispose();
   }
 
@@ -41,12 +41,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Continue with phone',
+                    'Login to Ceylon Travel',
                     style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Phone OTP will be connected with Firebase later. Email is optional for MVP, but required in the full system.',
+                    'Use your phone number and password. This MVP keeps login as a demo route until authentication is connected.',
                     style: TextStyle(color: Colors.black54),
                   ),
                   const SizedBox(height: 28),
@@ -61,13 +61,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 14),
                   TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
+                    controller: passwordController,
+                    obscureText: true,
                     decoration: const InputDecoration(
-                      labelText: 'Email optional for MVP',
-                      hintText: 'name@email.com',
-                      prefixIcon: Icon(Icons.email_outlined),
+                      labelText: 'Password',
+                      prefixIcon: Icon(Icons.lock_outline),
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Firebase authentication will be connected in Week 3.',
+                    style: TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
@@ -76,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _continueToAccountType,
                       child: const Padding(
                         padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('Continue'),
+                        child: Text('Login'),
                       ),
                     ),
                   ),
@@ -108,7 +112,7 @@ class LoginInfoCard extends StatelessWidget {
             SizedBox(width: 12),
             Expanded(
               child: Text(
-                'MVP login is demo only. Week 3 will connect Firebase Auth, phone OTP, selfie verification, and NIC/ID upload.',
+                'MVP login is demo only. Login opens the account type demo until Firebase Auth is wired in.',
                 style: TextStyle(color: Colors.black54),
               ),
             ),

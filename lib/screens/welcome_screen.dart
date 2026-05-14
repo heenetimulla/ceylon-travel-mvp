@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'auth/account_type_screen.dart';
 import 'auth/login_screen.dart';
+import 'auth/registration_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -10,6 +11,13 @@ class WelcomeScreen extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
+
+  void _openRegister(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RegistrationScreen()),
     );
   }
 
@@ -56,7 +64,18 @@ class WelcomeScreen extends StatelessWidget {
                       onPressed: () => _openLogin(context),
                       child: const Padding(
                         padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('Get Started'),
+                        child: Text('Login'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () => _openRegister(context),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        child: Text('Register'),
                       ),
                     ),
                   ),

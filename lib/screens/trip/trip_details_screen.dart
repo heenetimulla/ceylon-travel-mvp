@@ -62,7 +62,7 @@ class TripDetailsScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      '${tripPost.pickup} → ${tripPost.drop}',
+                      '${tripPost.pickup} -> ${tripPost.drop}',
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -83,6 +83,16 @@ class TripDetailsScreen extends StatelessWidget {
                       icon: Icons.calendar_month_outlined,
                       label: 'Date and time',
                       value: tripPost.dateTime,
+                    ),
+                    _DetailRow(
+                      icon: Icons.person_outline,
+                      label: 'Posted by',
+                      value: tripPost.creatorName,
+                    ),
+                    _DetailRow(
+                      icon: Icons.account_circle_outlined,
+                      label: 'Creator type',
+                      value: tripPost.creatorTypeLabel,
                     ),
                     _DetailRow(
                       icon: Icons.group_outlined,

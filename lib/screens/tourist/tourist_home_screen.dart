@@ -3,14 +3,18 @@ import 'package:flutter/material.dart';
 import '../../core/models/trip_post.dart';
 import '../../core/widgets/trip_post_card.dart';
 import '../trip/completed_trips_screen.dart';
+import '../trip/create_trip_post_screen.dart';
 import '../trip/trip_details_screen.dart';
-import 'create_trip_post_screen.dart';
 
 const List<TripPost> _touristExampleTripPosts = [
   TripPost(
+    creatorId: 'tourist-demo-1',
+    creatorType: 'tourist',
+    creatorName: 'Ayesha Perera',
+    touristId: 'tourist-demo-1',
     pickup: 'Bandaranaike Airport',
     drop: 'Ella',
-    dateTime: '20 May 2026 • 8:30 AM',
+    dateTime: '20 May 2026 - 8:30 AM',
     adults: 2,
     kids: 1,
     baggageCount: 3,
@@ -21,9 +25,13 @@ const List<TripPost> _touristExampleTripPosts = [
     status: 'OPEN',
   ),
   TripPost(
+    creatorId: 'tourist-demo-2',
+    creatorType: 'tourist',
+    creatorName: 'Nuwan Silva',
+    touristId: 'tourist-demo-2',
     pickup: 'Galle Fort',
     drop: 'Mirissa',
-    dateTime: '22 May 2026 • 10:00 AM',
+    dateTime: '22 May 2026 - 10:00 AM',
     adults: 4,
     kids: 0,
     baggageCount: 2,
@@ -106,7 +114,7 @@ class TouristHomeScreen extends StatelessWidget {
                     foregroundColor: const Color(0xFF0F766E),
                   ),
                   onPressed: () => _openCreateTripPost(context),
-                  child: const Text('Create Trip Post'),
+                  child: const Text('Create Trip / Hire Post'),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(

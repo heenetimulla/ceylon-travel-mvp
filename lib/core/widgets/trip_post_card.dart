@@ -43,7 +43,7 @@ class TripPostCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '${tripPost.pickup} → ${tripPost.drop}',
+                '${tripPost.pickup} -> ${tripPost.drop}',
                 style: const TextStyle(
                   fontSize: 19,
                   fontWeight: FontWeight.bold,
@@ -53,6 +53,10 @@ class TripPostCard extends StatelessWidget {
               InfoLine(
                 icon: Icons.calendar_month_outlined,
                 text: tripPost.dateTime,
+              ),
+              InfoLine(
+                icon: Icons.person_outline,
+                text: tripPost.postedByLabel,
               ),
               InfoLine(icon: Icons.group_outlined, text: tripPost.passengers),
               InfoLine(icon: Icons.luggage_outlined, text: tripPost.baggage),

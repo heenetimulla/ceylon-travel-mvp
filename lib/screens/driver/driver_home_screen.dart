@@ -3,15 +3,20 @@ import 'package:flutter/material.dart';
 import '../../core/models/trip_post.dart';
 import '../../core/widgets/trip_post_card.dart';
 import '../trip/completed_trips_screen.dart';
+import '../trip/create_trip_post_screen.dart';
 import '../trip/trip_details_screen.dart';
 import '../welcome_screen.dart';
 import 'submit_bid_screen.dart';
 
 const List<TripPost> _driverOpenTripPosts = [
   TripPost(
+    creatorId: 'tourist-demo-1',
+    creatorType: 'tourist',
+    creatorName: 'Ayesha Perera',
+    touristId: 'tourist-demo-1',
     pickup: 'Bandaranaike Airport',
     drop: 'Ella',
-    dateTime: '20 May 2026 • 8:30 AM',
+    dateTime: '20 May 2026 - 8:30 AM',
     adults: 2,
     kids: 1,
     baggageCount: 3,
@@ -22,9 +27,13 @@ const List<TripPost> _driverOpenTripPosts = [
     status: 'OPEN',
   ),
   TripPost(
+    creatorId: 'driver-demo-1',
+    creatorType: 'driver',
+    creatorName: 'Driver Nimal',
+    driverId: 'driver-demo-1',
     pickup: 'Galle Fort',
     drop: 'Mirissa',
-    dateTime: '22 May 2026 • 10:00 AM',
+    dateTime: '22 May 2026 - 10:00 AM',
     adults: 4,
     kids: 0,
     baggageCount: 2,
@@ -64,6 +73,13 @@ class DriverHomeScreen extends StatelessWidget {
     );
   }
 
+  void _openCreateHirePost(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CreateTripPostScreen()),
+    );
+  }
+
   void _openSubmitBid(BuildContext context, TripPost tripPost) {
     Navigator.push(
       context,
@@ -97,6 +113,22 @@ class DriverHomeScreen extends StatelessWidget {
             style: TextStyle(color: Colors.black54),
           ),
           const SizedBox(height: 14),
+          Card(
+            color: Colors.white,
+            child: ListTile(
+              leading: const Icon(
+                Icons.post_add_outlined,
+                color: Color(0xFF0F766E),
+              ),
+              title: const Text('Create Hire Post'),
+              subtitle: const Text(
+                'Got a hire you cannot do? Post it for other drivers.',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _openCreateHirePost(context),
+            ),
+          ),
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
