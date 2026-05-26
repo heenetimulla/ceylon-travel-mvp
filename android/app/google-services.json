@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "7655683762",
+    "project_id": "ceylon-travel-mvp",
+    "storage_bucket": "ceylon-travel-mvp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:7655683762:android:fee391366839d10185fbab",
+        "android_client_info": {
+          "package_name": "lk.ceylontravel.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAY6icMoE0RVyzpIQPBvIFJUFues9mbb4E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
