@@ -39,6 +39,10 @@ dependencies:
   cloud_firestore: ^6.9.0
   shared_preferences: ^2.5.3
 
+dependency_overrides:
+  # Temporary: firebase_core_web 3.11.0 does not compile with Dart 3.11.x.
+  firebase_core_web: 3.10.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
