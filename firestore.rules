@@ -1,0 +1,90 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function commonFields() {
+      return [
+        'uid', 'fullName', 'email', 'phoneNumber', 'city', 'accountType',
+        'profilePhotoPath', 'status', 'averageRating', 'completedTripsCount',
+        'cancelledTripsCount', 'cancellationRate', 'createdAt', 'updatedAt'
+      ];
+    }
+
+    function validCommonFields(data) {
+      return data.keys().hasAll(commonFields())
+        && data.uid == request.auth.uid
+        && data.fullName is string
+        && data.email is string
+        && data.phoneNumber is string
+        && data.city is string
+        && data.accountType in ['tourist', 'driver']
+        && data.status == 'active'
+        && data.profilePhotoPath == null
+        && data.averageRating == 0
+        && data.completedTripsCount == 0
+        && data.cancelledTripsCount == 0
+        && data.cancellationRate == 0
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function validVerification(verification) {
+      let fields = [
+        'status', 'submittedAt', 'reviewedAt', 'reviewedBy', 'rejectionReason'
+      ];
+      // Clients can submit verification, but cannot approve themselves.
+      return verification is map
+        && verification.keys().hasAll(fields)
+        && verification.keys().hasOnly(fields)
+        && verification.status == 'pending'
+        && verification.submittedAt == request.time
+        && verification.reviewedAt == null
+        && verification.reviewedBy == null
+        && verification.rejectionReason == null;
+    }
+
+    function validDriverFields(data) {
+      let fields = commonFields().concat([
+        'vehicleType', 'vehicleNumber', 'operatingArea', 'availableAreas',
+        'verification'
+      ]);
+      return data.keys().hasAll(fields)
+        && data.keys().hasOnly(fields)
+        && data.vehicleType is string
+        && data.vehicleNumber is string
+        && data.operatingArea is string
+        && data.availableAreas is string
+        && validVerification(data.verification);
+    }
+
+    match /users/{userId} {
+      // Exact field allowlists prevent clients from adding privileged fields.
+      // Server timestamp transforms must resolve to this request's time.
+      allow create: if isOwner(userId)
+        && validCommonFields(request.resource.data)
+        && (
+          (request.resource.data.accountType == 'tourist'
+            && request.resource.data.keys().hasOnly(commonFields()))
+          || (request.resource.data.accountType == 'driver'
+            && validDriverFields(request.resource.data))
+        );
+
+      allow get: if isOwner(userId);
+      // Profile editing and collection queries are not enabled in Stage 6A.
+      allow list, update, delete: if false;
+    }
+
+    // Includes all other collections and any user subcollections.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
