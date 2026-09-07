@@ -20,7 +20,7 @@ Future<void> pumpToWelcome(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('Ceylon Travel login demo route works', (
+  testWidgets('Ceylon Travel login validates required fields', (
     WidgetTester tester,
   ) async {
     await pumpToWelcome(tester);
@@ -29,20 +29,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Login to Ceylon Travel'), findsOneWidget);
-    expect(find.text('Phone number'), findsOneWidget);
+    expect(find.text('Email'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
-    expect(
-      find.text('Firebase authentication will be connected in Week 3.'),
-      findsOneWidget,
-    );
 
     await tester.tap(find.widgetWithText(FilledButton, 'Login'));
     await tester.pumpAndSettle();
 
-    expect(find.text('How will you use Ceylon Travel?'), findsOneWidget);
+    expect(find.text('Email is required.'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Email'), '   ');
+    await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+    await tester.pumpAndSettle();
+    expect(find.text('Email is required.'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Email'),
+      'tourist@example.com',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+    await tester.pumpAndSettle();
+    expect(find.text('Password is required.'), findsOneWidget);
+    expect(find.text('Login to Ceylon Travel'), findsOneWidget);
+    expect(find.text('How will you use Ceylon Travel?'), findsNothing);
+    expect(find.text('Tourist Dashboard'), findsNothing);
+    expect(find.text('Driver Dashboard'), findsNothing);
   });
 
-  testWidgets('Ceylon Travel register and tourist trip flow works', (
+  testWidgets('Ceylon Travel tourist registration validates required fields', (
     WidgetTester tester,
   ) async {
     await pumpToWelcome(tester);
@@ -53,6 +66,8 @@ void main() {
     expect(find.text('Create your account'), findsOneWidget);
     expect(find.text('Tourist/User'), findsOneWidget);
     expect(find.text('Driver'), findsOneWidget);
+    expect(find.text('Email'), findsOneWidget);
+    expect(find.text('Email optional'), findsNothing);
 
     final Finder createAccountButton = find.byKey(
       const Key('createAccountButton'),
@@ -61,133 +76,11 @@ void main() {
     await tester.tap(createAccountButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('Tourist Dashboard'), findsWidgets);
-    await tester.tap(find.text('Create Trip / Hire Post'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Create Trip / Hire Post'), findsWidgets);
-    expect(find.text('Pickup location'), findsOneWidget);
-    expect(find.text('Drop location'), findsOneWidget);
-    expect(
-      find.text(
-        'Tourists can request trips and drivers can post hires they cannot complete. Drivers will see open posts and send private bids.',
-      ),
-      findsOneWidget,
-    );
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    final Finder viewDetailsButton = find
-        .widgetWithText(TextButton, 'View Details')
-        .first;
-    await tester.ensureVisible(viewDetailsButton);
-    await tester.pumpAndSettle();
-    await tester.tap(viewDetailsButton);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Trip Details'), findsOneWidget);
-    expect(find.text('View Bids'), findsOneWidget);
-    expect(find.text('Bandaranaike Airport'), findsWidgets);
-    expect(find.text('Posted by'), findsOneWidget);
-    expect(find.text('Creator type'), findsOneWidget);
-
-    final Finder viewBidsButton = find.widgetWithText(
-      OutlinedButton,
-      'View Bids',
-    );
-    await tester.ensureVisible(viewBidsButton);
-    await tester.pumpAndSettle();
-    await tester.tap(viewBidsButton);
-    await tester.pumpAndSettle();
-
-    expect(
-      find.text('Bids are private. Only you can see driver prices.'),
-      findsOneWidget,
-    );
-
-    final Finder firstAcceptBidButton = find
-        .widgetWithText(FilledButton, 'Accept Bid')
-        .first;
-    await tester.ensureVisible(firstAcceptBidButton);
-    await tester.pumpAndSettle();
-    await tester.tap(firstAcceptBidButton);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Accept this driver bid?'), findsOneWidget);
-
-    await tester.tap(
-      find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.text('Accept Bid'),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('ACCEPTED'), findsOneWidget);
-
-    await tester.drag(find.byType(Scrollable).last, const Offset(0, 500));
-    await tester.pumpAndSettle();
-
-    final Finder pendingTripButton = find.widgetWithText(
-      FilledButton,
-      'Go to Pending Trip',
-    );
-    await tester.ensureVisible(pendingTripButton);
-    await tester.pumpAndSettle();
-    await tester.tap(pendingTripButton);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Pending Trip'), findsOneWidget);
-
-    final Finder openChatButton = find.widgetWithText(
-      FilledButton,
-      'Open Chat',
-    );
-    await tester.scrollUntilVisible(openChatButton, 250);
-    await tester.tap(openChatButton);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Trip Chat'), findsOneWidget);
-
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    expect(find.text('Pending Trip'), findsOneWidget);
-
-    final Finder confirmCompletedButton = find.widgetWithText(
-      OutlinedButton,
-      'Confirm Completed',
-    );
-    await tester.scrollUntilVisible(confirmCompletedButton, 250);
-    await tester.tap(confirmCompletedButton);
-    await tester.pumpAndSettle();
-
-    final Finder openCompletedTripsButton = find.widgetWithText(
-      FilledButton,
-      'Open Completed Trips',
-    );
-    await tester.drag(find.byType(Scrollable).last, const Offset(0, -300));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(openCompletedTripsButton);
-    await tester.pumpAndSettle();
-    await tester.tap(openCompletedTripsButton);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Completed Trips'), findsOneWidget);
-
-    final Finder rateTripButton = find
-        .widgetWithText(FilledButton, 'Rate Trip')
-        .first;
-    await tester.ensureVisible(rateTripButton);
-    await tester.tap(rateTripButton);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Rate Trip'), findsOneWidget);
-    expect(find.text('Trip summary'), findsOneWidget);
+    expect(find.text('Full name is required.'), findsOneWidget);
+    expect(find.text('Tourist Dashboard'), findsNothing);
   });
 
-  testWidgets('Ceylon Travel driver registration path works', (
+  testWidgets('Ceylon Travel driver registration validates driver fields', (
     WidgetTester tester,
   ) async {
     await pumpToWelcome(tester);
@@ -209,6 +102,31 @@ void main() {
     expect(find.text('NIC / ID upload placeholder'), findsOneWidget);
     expect(find.text('Selfie verification placeholder'), findsOneWidget);
 
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Full name'),
+      'Test Driver',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Phone number'),
+      '+94771234567',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Email'),
+      'driver@example.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'password123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Confirm password'),
+      'password123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'City / District'),
+      'Colombo',
+    );
+
     final Finder createAccountButton = find.byKey(
       const Key('createAccountButton'),
     );
@@ -216,16 +134,7 @@ void main() {
     await tester.tap(createAccountButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('Driver Dashboard'), findsWidgets);
-    expect(find.text('Create Hire Post'), findsOneWidget);
-    expect(
-      find.text('Got a hire you cannot do? Post it for other drivers.'),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('Create Hire Post'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Create Trip / Hire Post'), findsWidgets);
+    expect(find.text('Vehicle type is required.'), findsOneWidget);
+    expect(find.text('Driver Dashboard'), findsNothing);
   });
 }

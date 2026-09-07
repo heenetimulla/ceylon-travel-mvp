@@ -1,6 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/enums/account_type.dart';
+import '../../core/services/auth_service.dart';
 import '../../core/widgets/upload_placeholder.dart';
 import '../driver/driver_home_screen.dart';
 import '../tourist/tourist_home_screen.dart';
@@ -30,10 +32,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final TextEditingController operatingAreaController = TextEditingController();
   final TextEditingController availableAreasController =
       TextEditingController();
+  AuthService? _authService;
+  FirebaseFirestore? _firestore;
 
   late AccountType selectedAccountType;
+  bool isRegistering = false;
 
   bool get isDriver => selectedAccountType == AccountType.driver;
+
+  AuthService get authService => _authService ??= AuthService();
+
+  FirebaseFirestore get firestore => _firestore ??= FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -64,7 +73,153 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     });
   }
 
-  void _createAccount() {
+  Future<void> _createAccount() async {
+    if (isRegistering) return;
+
+    final String? validationError = _validateRegistration();
+    if (validationError != null) {
+      _showRegistrationError(validationError);
+      return;
+    }
+
+    setState(() {
+      isRegistering = true;
+    });
+
+    try {
+      final credential = await authService.registerWithEmailAndPassword(
+        email: emailController.text,
+        password: passwordController.text,
+      );
+      final String? uid = credential.user?.uid;
+
+      if (uid == null) {
+        _showRegistrationError(
+          'Registration could not be completed. Please try again.',
+        );
+        return;
+      }
+
+      await firestore.collection('users').doc(uid).set(_buildUserDocument(uid));
+
+      if (!mounted) return;
+
+      _openHomeScreen();
+    } on AuthServiceException catch (exception) {
+      _showRegistrationError(exception.message);
+    } on FirebaseException {
+      _showRegistrationError(
+        'Your account was created, but your profile could not be saved. Please try again.',
+      );
+    } catch (_) {
+      _showRegistrationError('Registration failed. Please try again.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isRegistering = false;
+        });
+      }
+    }
+  }
+
+  String? _validateRegistration() {
+    if (_isBlank(fullNameController)) {
+      return 'Full name is required.';
+    }
+    if (_isBlank(phoneController)) {
+      return 'Phone number is required.';
+    }
+    if (_isBlank(emailController)) {
+      return 'Email is required.';
+    }
+    if (!_isValidEmail(emailController.text.trim())) {
+      return 'Enter a valid email address.';
+    }
+    if (_isBlank(passwordController)) {
+      return 'Password is required.';
+    }
+    if (_isBlank(confirmPasswordController)) {
+      return 'Confirm password is required.';
+    }
+    if (passwordController.text != confirmPasswordController.text) {
+      return 'Passwords do not match.';
+    }
+    if (_isBlank(cityController)) {
+      return 'City / District is required.';
+    }
+    if (isDriver) {
+      if (_isBlank(vehicleTypeController)) {
+        return 'Vehicle type is required.';
+      }
+      if (_isBlank(vehicleNumberController)) {
+        return 'Vehicle number is required.';
+      }
+      if (_isBlank(operatingAreaController)) {
+        return 'Operating area is required.';
+      }
+      if (_isBlank(availableAreasController)) {
+        return 'Available areas are required.';
+      }
+    }
+
+    return null;
+  }
+
+  bool _isBlank(TextEditingController controller) {
+    return controller.text.trim().isEmpty;
+  }
+
+  bool _isValidEmail(String email) {
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
+  }
+
+  Map<String, Object?> _buildUserDocument(String uid) {
+    final FieldValue timestamp = FieldValue.serverTimestamp();
+    final Map<String, Object?> userDocument = {
+      'uid': uid,
+      'fullName': fullNameController.text.trim(),
+      'email': emailController.text.trim(),
+      'phoneNumber': phoneController.text.trim(),
+      'city': cityController.text.trim(),
+      'accountType': isDriver ? 'driver' : 'tourist',
+      'profilePhotoPath': null,
+      'status': 'active',
+      'averageRating': 0,
+      'completedTripsCount': 0,
+      'cancelledTripsCount': 0,
+      'cancellationRate': 0,
+      'createdAt': timestamp,
+      'updatedAt': timestamp,
+    };
+
+    if (isDriver) {
+      userDocument.addAll({
+        'vehicleType': vehicleTypeController.text.trim(),
+        'vehicleNumber': vehicleNumberController.text.trim(),
+        'operatingArea': operatingAreaController.text.trim(),
+        'availableAreas': availableAreasController.text.trim(),
+        'verification': {
+          'status': 'pending',
+          'submittedAt': timestamp,
+          'reviewedAt': null,
+          'reviewedBy': null,
+          'rejectionReason': null,
+        },
+      });
+    }
+
+    return userDocument;
+  }
+
+  void _showRegistrationError(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _openHomeScreen() {
     final Widget destination = isDriver
         ? const DriverHomeScreen()
         : const TouristHomeScreen();
@@ -94,7 +249,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Use one registration form for tourist/user and driver accounts. Firebase saving will be connected in Week 3.',
+                    'Use one registration form for tourist/user and driver accounts. Your account profile will be saved securely to Firebase.',
                     style: TextStyle(color: Colors.black54),
                   ),
                   const SizedBox(height: 22),
@@ -119,7 +274,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     controller: emailController,
                     keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(
-                      labelText: 'Email optional',
+                      labelText: 'Email',
                       prefixIcon: Icon(Icons.email_outlined),
                     ),
                   ),
@@ -227,10 +382,18 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     width: double.infinity,
                     child: FilledButton(
                       key: const Key('createAccountButton'),
-                      onPressed: _createAccount,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('Create Account'),
+                      onPressed: isRegistering ? null : _createAccount,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: isRegistering
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Create Account'),
                       ),
                     ),
                   ),
