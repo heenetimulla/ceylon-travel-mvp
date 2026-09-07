@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
 import '../../core/widgets/trip_post_card.dart';
+import '../../core/widgets/user_identity_header.dart';
 import '../auth/session_navigation.dart';
 import '../trip/completed_trips_screen.dart';
 import '../trip/create_trip_post_screen.dart';
@@ -89,6 +90,8 @@ class DriverHomeScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
+          const UserIdentityHeader(),
+          const SizedBox(height: 20),
           const Text(
             'Open trip posts',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
