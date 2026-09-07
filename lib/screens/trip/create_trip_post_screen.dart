@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/services/trip_post_service.dart';
 import '../../core/widgets/counter_row.dart';
 
 class CreateTripPostScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
   int kids = 0;
   int baggage = 1;
   String vehiclePreference = 'Any';
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -39,7 +41,7 @@ class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
       lastDate: now.add(const Duration(days: 365)),
     );
 
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
 
     setState(() {
       selectedDate = picked;
@@ -52,23 +54,72 @@ class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
       initialTime: TimeOfDay.now(),
     );
 
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
 
     setState(() {
       selectedTime = picked;
     });
   }
 
-  void _postTripAdvertisement() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Demo trip or hire post created. Firebase saving comes in Week 3.',
-        ),
-      ),
-    );
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
 
-    Navigator.pop(context);
+  Future<void> _postTripAdvertisement() async {
+    if (_isSaving) return;
+    if (pickupController.text.trim().isEmpty) {
+      _showMessage('Enter a pickup location.');
+      return;
+    }
+    if (dropController.text.trim().isEmpty) {
+      _showMessage('Enter a drop location.');
+      return;
+    }
+    final date = selectedDate;
+    final time = selectedTime;
+    if (date == null) {
+      _showMessage('Select a trip date.');
+      return;
+    }
+    if (time == null) {
+      _showMessage('Select a trip time.');
+      return;
+    }
+    final scheduledAt = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+    if (scheduledAt.isBefore(DateTime.now())) {
+      _showMessage('Choose a date and time in the future.');
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      await TripPostService().createTripPost(
+        pickupLocationText: pickupController.text,
+        dropLocationText: dropController.text,
+        scheduledAt: scheduledAt,
+        adultsCount: adults,
+        kidsCount: kids,
+        baggageCount: baggage,
+        vehiclePreference: vehiclePreference,
+        notes: notesController.text,
+      );
+      if (!mounted) return;
+      _showMessage('Trip / hire post created successfully.');
+      Navigator.pop(context);
+    } on TripPostServiceException catch (error) {
+      if (mounted) _showMessage(error.message);
+    } catch (_) {
+      if (mounted) _showMessage('Could not save your post. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   String get _dateText {
@@ -100,7 +151,7 @@ class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Tourists can request trips and drivers can post hires they cannot complete. Drivers will see open posts and send private bids.',
+              'Tourists can request trips and drivers can post hires for their customers. Drivers will see open posts and send private bids.',
               style: TextStyle(color: Colors.black54),
             ),
             const SizedBox(height: 18),
@@ -178,9 +229,19 @@ class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
               ),
               items: const [
                 DropdownMenuItem(value: 'Any', child: Text('Any')),
-                DropdownMenuItem(value: 'Car', child: Text('Car')),
-                DropdownMenuItem(value: 'Van', child: Text('Van')),
+                DropdownMenuItem(value: 'TukTuk', child: Text('TukTuk')),
+                DropdownMenuItem(value: 'Small Car', child: Text('Small Car')),
+                DropdownMenuItem(value: 'Sedan Car', child: Text('Sedan Car')),
+                DropdownMenuItem(
+                  value: 'Van - Highroof',
+                  child: Text('Van - Highroof'),
+                ),
+                DropdownMenuItem(
+                  value: 'Van - Flatroof',
+                  child: Text('Van - Flatroof'),
+                ),
                 DropdownMenuItem(value: 'SUV', child: Text('SUV')),
+                DropdownMenuItem(value: 'Bus', child: Text('Bus')),
               ],
               onChanged: (String? value) {
                 if (value == null) return;
@@ -199,11 +260,17 @@ class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: _postTripAdvertisement,
-              icon: const Icon(Icons.send),
-              label: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 14),
-                child: Text('Post Trip / Hire'),
+              onPressed: _isSaving ? null : _postTripAdvertisement,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send),
+              label: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Text(_isSaving ? 'Saving...' : 'Post Trip / Hire'),
               ),
             ),
           ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
+import '../../core/services/trip_post_service.dart';
 import '../../core/widgets/trip_post_card.dart';
 import '../../core/widgets/user_identity_header.dart';
 import '../auth/session_navigation.dart';
@@ -8,45 +9,25 @@ import '../trip/completed_trips_screen.dart';
 import '../trip/create_trip_post_screen.dart';
 import '../trip/trip_details_screen.dart';
 
-const List<TripPost> _touristExampleTripPosts = [
-  TripPost(
-    creatorId: 'tourist-demo-1',
-    creatorType: 'tourist',
-    creatorName: 'Ayesha Perera',
-    touristId: 'tourist-demo-1',
-    pickup: 'Bandaranaike Airport',
-    drop: 'Ella',
-    dateTime: '20 May 2026 - 8:30 AM',
-    adults: 2,
-    kids: 1,
-    baggageCount: 3,
-    passengers: '2 adults, 1 kid',
-    baggage: '3 bags',
-    vehiclePreference: 'Van',
-    notes: 'Need an English-speaking driver with space for luggage.',
-    status: 'OPEN',
-  ),
-  TripPost(
-    creatorId: 'tourist-demo-2',
-    creatorType: 'tourist',
-    creatorName: 'Nuwan Silva',
-    touristId: 'tourist-demo-2',
-    pickup: 'Galle Fort',
-    drop: 'Mirissa',
-    dateTime: '22 May 2026 - 10:00 AM',
-    adults: 4,
-    kids: 0,
-    baggageCount: 2,
-    passengers: '4 adults',
-    baggage: '2 bags',
-    vehiclePreference: 'Any',
-    notes: 'Prefer a comfortable vehicle for a coastal route.',
-    status: 'OPEN',
-  ),
-];
-
-class TouristHomeScreen extends StatelessWidget {
+class TouristHomeScreen extends StatefulWidget {
   const TouristHomeScreen({super.key});
+
+  @override
+  State<TouristHomeScreen> createState() => _TouristHomeScreenState();
+}
+
+class _TouristHomeScreenState extends State<TouristHomeScreen> {
+  late Stream<List<TripPost>> _posts;
+
+  @override
+  void initState() {
+    super.initState();
+    _posts = TripPostService().watchTouristPosts();
+  }
+
+  void _retryPosts() {
+    setState(() => _posts = TripPostService().watchTouristPosts());
+  }
 
   void _openCreateTripPost(BuildContext context) {
     Navigator.push(
@@ -136,15 +117,39 @@ class TouristHomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Example open trip posts',
+            'My open trip posts',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          for (final TripPost tripPost in _touristExampleTripPosts)
-            TripPostCard(
-              tripPost: tripPost,
-              onViewDetails: () => _openTripDetails(context, tripPost),
-            ),
+          StreamBuilder<List<TripPost>>(
+            stream: _posts,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Column(
+                  children: [
+                    const Text('Could not load your trip posts. Please try again.'),
+                    TextButton(onPressed: _retryPosts, child: const Text('Retry')),
+                  ],
+                );
+              }
+              final posts = snapshot.data ?? const <TripPost>[];
+              if (posts.isEmpty) {
+                return const Text("You haven't created any open trip posts yet.");
+              }
+              return Column(
+                children: [
+                  for (final tripPost in posts)
+                    TripPostCard(
+                      tripPost: tripPost,
+                      onViewDetails: () => _openTripDetails(context, tripPost),
+                    ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );

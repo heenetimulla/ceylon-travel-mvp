@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
+import '../../core/services/trip_post_service.dart';
 import '../../core/widgets/trip_post_card.dart';
 import '../../core/widgets/user_identity_header.dart';
 import '../auth/session_navigation.dart';
@@ -9,45 +10,25 @@ import '../trip/create_trip_post_screen.dart';
 import '../trip/trip_details_screen.dart';
 import 'submit_bid_screen.dart';
 
-const List<TripPost> _driverOpenTripPosts = [
-  TripPost(
-    creatorId: 'tourist-demo-1',
-    creatorType: 'tourist',
-    creatorName: 'Ayesha Perera',
-    touristId: 'tourist-demo-1',
-    pickup: 'Bandaranaike Airport',
-    drop: 'Ella',
-    dateTime: '20 May 2026 - 8:30 AM',
-    adults: 2,
-    kids: 1,
-    baggageCount: 3,
-    passengers: '2 adults, 1 kid',
-    baggage: '3 bags',
-    vehiclePreference: 'Van',
-    notes: 'Need an English-speaking driver with space for luggage.',
-    status: 'OPEN',
-  ),
-  TripPost(
-    creatorId: 'driver-demo-1',
-    creatorType: 'driver',
-    creatorName: 'Driver Nimal',
-    driverId: 'driver-demo-1',
-    pickup: 'Galle Fort',
-    drop: 'Mirissa',
-    dateTime: '22 May 2026 - 10:00 AM',
-    adults: 4,
-    kids: 0,
-    baggageCount: 2,
-    passengers: '4 adults',
-    baggage: '2 bags',
-    vehiclePreference: 'Any',
-    notes: 'Prefer a comfortable vehicle for a coastal route.',
-    status: 'OPEN',
-  ),
-];
-
-class DriverHomeScreen extends StatelessWidget {
+class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
+
+  @override
+  State<DriverHomeScreen> createState() => _DriverHomeScreenState();
+}
+
+class _DriverHomeScreenState extends State<DriverHomeScreen> {
+  late Stream<List<TripPost>> _posts;
+
+  @override
+  void initState() {
+    super.initState();
+    _posts = TripPostService().watchDriverPosts();
+  }
+
+  void _retryPosts() {
+    setState(() => _posts = TripPostService().watchDriverPosts());
+  }
 
   void _openTripDetails(BuildContext context, TripPost tripPost) {
     Navigator.push(
@@ -111,7 +92,7 @@ class DriverHomeScreen extends StatelessWidget {
               ),
               title: const Text('Create Hire Post'),
               subtitle: const Text(
-                'Got a hire you cannot do? Post it for other drivers.',
+                'Post a hire for your customer.',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _openCreateHirePost(context),
@@ -130,12 +111,36 @@ class DriverHomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          for (final TripPost tripPost in _driverOpenTripPosts)
-            TripPostCard(
-              tripPost: tripPost,
-              onViewDetails: () => _openTripDetails(context, tripPost),
-              onSubmitBid: () => _openSubmitBid(context, tripPost),
-            ),
+          StreamBuilder<List<TripPost>>(
+            stream: _posts,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Column(
+                  children: [
+                    const Text('Could not load trip posts. Please try again.'),
+                    TextButton(onPressed: _retryPosts, child: const Text('Retry')),
+                  ],
+                );
+              }
+              final posts = snapshot.data ?? const <TripPost>[];
+              if (posts.isEmpty) {
+                return const Text('No open trip posts are available right now.');
+              }
+              return Column(
+                children: [
+                  for (final tripPost in posts)
+                    TripPostCard(
+                      tripPost: tripPost,
+                      onViewDetails: () => _openTripDetails(context, tripPost),
+                      onSubmitBid: () => _openSubmitBid(context, tripPost),
+                    ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );

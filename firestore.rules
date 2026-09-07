@@ -82,6 +82,112 @@ service cloud.firestore {
       allow list, update, delete: if false;
     }
 
+    function exactTripPostFields(data) {
+      let fields = [
+        'id', 'creatorId', 'creatorType', 'creatorName', 'postType',
+        'postOrigin', 'touristId', 'driverId', 'pickupLocationText',
+        'dropLocationText', 'scheduledAt', 'adultsCount', 'kidsCount',
+        'baggageCount', 'vehiclePreference', 'notes', 'status',
+        'acceptedBidId', 'acceptedDriverId', 'createdAt', 'updatedAt'
+      ];
+      return data.keys().hasAll(fields) && data.keys().hasOnly(fields);
+    }
+
+    function validTripCreatorProfile(data) {
+      let profilePath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(profilePath)
+        && get(profilePath).data.status == 'active'
+        && get(profilePath).data.accountType in ['tourist', 'driver']
+        && data.creatorType == get(profilePath).data.accountType
+        && data.creatorName == get(profilePath).data.fullName;
+    }
+
+    function validTripIdentity(data, tripId) {
+      return data.id is string
+        && data.id.size() > 0
+        && data.id == tripId
+        && data.creatorId == request.auth.uid
+        && data.creatorType in ['tourist', 'driver']
+        && data.creatorName is string
+        && data.creatorName.size() > 0
+        && data.creatorName.size() <= 120
+        && data.postType == 'trip_request'
+        && (
+          (data.creatorType == 'tourist'
+            && data.touristId == request.auth.uid
+            && data.driverId == null
+            && data.postOrigin == 'direct')
+          || (data.creatorType == 'driver'
+            && data.touristId == null
+            && data.driverId == request.auth.uid
+            && data.postOrigin == 'partner')
+        );
+    }
+
+    function validTripText(data) {
+      return data.pickupLocationText is string
+        && data.pickupLocationText.size() > 0
+        && data.pickupLocationText.size() <= 200
+        && data.dropLocationText is string
+        && data.dropLocationText.size() > 0
+        && data.dropLocationText.size() <= 200
+        && data.notes is string
+        && data.notes.size() <= 1000;
+    }
+
+    function validTripCounts(data) {
+      return data.adultsCount is int
+        && data.adultsCount >= 1 && data.adultsCount <= 100
+        && data.kidsCount is int
+        && data.kidsCount >= 0 && data.kidsCount <= 100
+        && data.baggageCount is int
+        && data.baggageCount >= 0 && data.baggageCount <= 200;
+    }
+
+    function validTripVehicle(data) {
+      return data.vehiclePreference in [
+        'Any', 'TukTuk', 'Small Car', 'Sedan Car',
+        'Van - Highroof', 'Van - Flatroof', 'SUV', 'Bus'
+      ];
+    }
+
+    function validInitialTripState(data) {
+      return data.status == 'open'
+        && data.acceptedBidId == null
+        && data.acceptedDriverId == null
+        && data.scheduledAt is timestamp
+        && data.scheduledAt > request.time
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function canReadTripPost(data) {
+      let profilePath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(profilePath)
+        && (
+          (get(profilePath).data.accountType == 'tourist'
+            && get(profilePath).data.status == 'active'
+            && data.touristId == request.auth.uid)
+          || (get(profilePath).data.accountType == 'driver'
+            && get(profilePath).data.status == 'active'
+            && data.status == 'open')
+        );
+    }
+
+    match /trip_posts/{tripId} {
+      allow create: if isSignedIn()
+        && exactTripPostFields(request.resource.data)
+        && validTripCreatorProfile(request.resource.data)
+        && validTripIdentity(request.resource.data, tripId)
+        && validTripText(request.resource.data)
+        && validTripCounts(request.resource.data)
+        && validTripVehicle(request.resource.data)
+        && validInitialTripState(request.resource.data);
+
+      allow get, list: if isSignedIn() && canReadTripPost(resource.data);
+      allow update, delete: if false;
+    }
+
     // Includes all other collections and any user subcollections.
     match /{document=**} {
       allow read, write: if false;
