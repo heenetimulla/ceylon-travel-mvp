@@ -1,9 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:taxi_app/app/ceylon_travel_app.dart';
+import 'package:taxi_app/core/services/auth_preferences_service.dart';
+import 'package:taxi_app/screens/auth/login_screen.dart';
+import 'package:taxi_app/screens/welcome_screen.dart';
 
 Future<void> pumpToWelcome(WidgetTester tester) async {
-  await tester.pumpWidget(const CeylonTravelApp());
+  await tester.pumpWidget(
+    CeylonTravelApp(resolveSession: () async => const WelcomeScreen()),
+  );
 
   expect(find.text('Ceylon Travel'), findsOneWidget);
 
@@ -20,6 +28,57 @@ Future<void> pumpToWelcome(WidgetTester tester) async {
 }
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('Login restores only the last successful email', (tester) async {
+    const preferences = AuthPreferencesService();
+    await preferences.saveLastLoginEmail('  saved@example.com  ');
+
+    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
+    await tester.pumpAndSettle();
+
+    final emailField = find.widgetWithText(TextField, 'Email');
+    final passwordField = find.widgetWithText(TextField, 'Password');
+    expect(
+      tester.widget<TextField>(emailField).controller!.text,
+      'saved@example.com',
+    );
+    expect(tester.widget<TextField>(passwordField).controller!.text, isEmpty);
+
+    await tester.enterText(emailField, 'another@example.com');
+    await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Password is required.'), findsOneWidget);
+    expect(await preferences.getLastLoginEmail(), 'saved@example.com');
+    final storage = await SharedPreferences.getInstance();
+    expect(storage.getKeys(), {'auth.last_successful_login_email'});
+  });
+
+  testWidgets('Delayed email restoration preserves user edits', (tester) async {
+    final preferences = _DelayedAuthPreferences();
+    await tester.pumpWidget(
+      MaterialApp(home: LoginScreen(authPreferences: preferences)),
+    );
+    final emailField = find.widgetWithText(TextField, 'Email');
+    await tester.enterText(emailField, 'new@example.com');
+    await tester.enterText(emailField, '');
+
+    preferences.email.complete('saved@example.com');
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextField>(emailField).controller!.text, isEmpty);
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'Password'))
+          .controller!
+          .text,
+      isEmpty,
+    );
+  });
+
   testWidgets('Ceylon Travel login validates required fields', (
     WidgetTester tester,
   ) async {
@@ -137,4 +196,11 @@ void main() {
     expect(find.text('Vehicle type is required.'), findsOneWidget);
     expect(find.text('Driver Dashboard'), findsNothing);
   });
+}
+
+class _DelayedAuthPreferences extends AuthPreferencesService {
+  final email = Completer<String?>();
+
+  @override
+  Future<String?> getLastLoginEmail() => email.future;
 }

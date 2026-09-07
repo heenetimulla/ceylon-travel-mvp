@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
 import '../../core/widgets/trip_post_card.dart';
+import '../auth/session_navigation.dart';
 import '../trip/completed_trips_screen.dart';
 import '../trip/create_trip_post_screen.dart';
 import '../trip/trip_details_screen.dart';
@@ -76,6 +77,7 @@ class TouristHomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Tourist Dashboard'),
         actions: [
+          const LogoutButton(),
           IconButton(
             onPressed: () {},
             icon: const Icon(Icons.notifications_none),

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
 import '../../core/widgets/trip_post_card.dart';
+import '../auth/session_navigation.dart';
 import '../trip/completed_trips_screen.dart';
 import '../trip/create_trip_post_screen.dart';
 import '../trip/trip_details_screen.dart';
-import '../welcome_screen.dart';
 import 'submit_bid_screen.dart';
 
 const List<TripPost> _driverOpenTripPosts = [
@@ -48,14 +48,6 @@ const List<TripPost> _driverOpenTripPosts = [
 class DriverHomeScreen extends StatelessWidget {
   const DriverHomeScreen({super.key});
 
-  void _goBackToWelcome(BuildContext context) {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-      (route) => false,
-    );
-  }
-
   void _openTripDetails(BuildContext context, TripPost tripPost) {
     Navigator.push(
       context,
@@ -92,13 +84,7 @@ class DriverHomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Driver Dashboard'),
-        actions: [
-          IconButton(
-            tooltip: 'Back to welcome',
-            onPressed: () => _goBackToWelcome(context),
-            icon: const Icon(Icons.logout),
-          ),
-        ],
+        actions: const [LogoutButton()],
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),

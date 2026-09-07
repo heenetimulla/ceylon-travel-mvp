@@ -1,12 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/services/auth_preferences_service.dart';
 import '../../core/services/auth_service.dart';
 import '../driver/driver_home_screen.dart';
 import '../tourist/tourist_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({
+    super.key,
+    this.authPreferences = const AuthPreferencesService(),
+  });
+
+  final AuthPreferencesService authPreferences;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -16,6 +22,23 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _emailEdited = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreLastLoginEmail();
+  }
+
+  Future<void> _restoreLastLoginEmail() async {
+    try {
+      final email = await widget.authPreferences.getLastLoginEmail();
+      if (!mounted || _emailEdited || emailController.text.isNotEmpty) return;
+      if (email != null) emailController.text = email;
+    } catch (_) {
+      return;
+    }
+  }
 
   @override
   void dispose() {
@@ -107,6 +130,15 @@ class _LoginScreenState extends State<LoginScreen> {
           );
           return;
       }
+      try {
+        await widget.authPreferences.saveLastLoginEmail(email);
+      } catch (_) {
+        if (!mounted) return;
+        _showError(
+          'Signed in, but your email could not be remembered on this device.',
+        );
+      }
+      if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute<void>(builder: (_) => homeScreen),
         (route) => false,
@@ -151,6 +183,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 28),
                   TextField(
                     controller: emailController,
+                    onChanged: (_) => _emailEdited = true,
+                    autofillHints: const [AutofillHints.email],
                     enabled: !_isLoading,
                     autocorrect: false,
                     keyboardType: TextInputType.emailAddress,
@@ -163,6 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 14),
                   TextField(
                     controller: passwordController,
+                    autofillHints: const [AutofillHints.password],
                     enabled: !_isLoading,
                     autocorrect: false,
                     enableSuggestions: false,
