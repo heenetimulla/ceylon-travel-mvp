@@ -20,7 +20,7 @@ class BidCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = effectiveStatus ?? bid.status;
-    final String statusText = status.toUpperCase();
+    final String statusText = status.replaceAll('_', ' ').toUpperCase();
     final bool canAccept =
         status == 'submitted' && onAccept != null && !isSaving;
 

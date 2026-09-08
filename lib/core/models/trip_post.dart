@@ -21,6 +21,11 @@ class TripPost {
     required this.status,
     this.acceptedBidId,
     this.acceptedDriverId,
+    this.excludedDriverIds = const [],
+    this.cancellationCount = 0,
+    this.lastCancellationBy,
+    this.lastCancellationReason,
+    this.lastCancellationAt,
     this.createdAt,
     this.updatedAt,
   });
@@ -44,6 +49,11 @@ class TripPost {
   final String status;
   final String? acceptedBidId;
   final String? acceptedDriverId;
+  final List<String> excludedDriverIds;
+  final int cancellationCount;
+  final String? lastCancellationBy;
+  final String? lastCancellationReason;
+  final DateTime? lastCancellationAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -126,6 +136,13 @@ class TripPost {
       status: data['status'] as String,
       acceptedBidId: data['acceptedBidId'] as String?,
       acceptedDriverId: data['acceptedDriverId'] as String?,
+      excludedDriverIds: List<String>.from(
+        data['excludedDriverIds'] ?? const [],
+      ),
+      cancellationCount: data['cancellationCount'] as int? ?? 0,
+      lastCancellationBy: data['lastCancellationBy'] as String?,
+      lastCancellationReason: data['lastCancellationReason'] as String?,
+      lastCancellationAt: _readDate(data['lastCancellationAt']),
       createdAt: _readDate(data['createdAt']),
       updatedAt: _readDate(data['updatedAt']),
     );
@@ -151,6 +168,13 @@ class TripPost {
     'status': status,
     'acceptedBidId': acceptedBidId,
     'acceptedDriverId': acceptedDriverId,
+    'excludedDriverIds': excludedDriverIds,
+    'cancellationCount': cancellationCount,
+    'lastCancellationBy': lastCancellationBy,
+    'lastCancellationReason': lastCancellationReason,
+    'lastCancellationAt': lastCancellationAt == null
+        ? null
+        : Timestamp.fromDate(lastCancellationAt!),
     'createdAt': createdAt == null ? null : Timestamp.fromDate(createdAt!),
     'updatedAt': updatedAt == null ? null : Timestamp.fromDate(updatedAt!),
   };

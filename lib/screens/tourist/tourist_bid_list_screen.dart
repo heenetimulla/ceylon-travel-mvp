@@ -5,6 +5,7 @@ import '../../core/models/trip_post.dart';
 import '../../core/services/bid_service.dart';
 import '../../core/widgets/bid_card.dart';
 import '../../core/widgets/info_line.dart';
+import '../../core/widgets/trip_cancellation_button.dart';
 
 class TouristBidListScreen extends StatefulWidget {
   const TouristBidListScreen({super.key, required this.tripPost});
@@ -305,6 +306,10 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                if (['open', 'accepted'].contains(tripPost.status) && !_isAccepting)
+                  TripCancellationButton(trip: tripPost, byDriver: false),
+                if (tripPost.status == 'cancelled')
+                  const Text('This trip has been cancelled.'),
                 _buildBids(tripPost),
               ],
             ),

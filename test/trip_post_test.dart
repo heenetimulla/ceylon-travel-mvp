@@ -29,6 +29,38 @@ TripPost example({
 );
 
 void main() {
+  test('Cancellation fields initialize and legacy Stage 8 maps default safely', () {
+    final map = example().toFirestore();
+    expect(map['excludedDriverIds'], isEmpty);
+    expect(map['cancellationCount'], 0);
+    for (final field in ['lastCancellationBy', 'lastCancellationReason', 'lastCancellationAt']) {
+      expect(map[field], isNull);
+    }
+    for (final field in ['excludedDriverIds', 'cancellationCount',
+      'lastCancellationBy', 'lastCancellationReason', 'lastCancellationAt']) {
+      map.remove(field);
+    }
+    final old = TripPost.fromMap('old-trip', map);
+    expect(old.excludedDriverIds, isEmpty);
+    expect(old.cancellationCount, 0);
+    expect(old.lastCancellationBy, isNull);
+    expect(old.lastCancellationReason, isNull);
+    expect(old.lastCancellationAt, isNull);
+    final date = DateTime.utc(2026, 9, 9);
+    map.addAll({
+      'excludedDriverIds': ['driver-1', 'driver-2'], 'cancellationCount': 2,
+      'lastCancellationBy': 'driver-2', 'lastCancellationReason': 'Vehicle issue',
+      'lastCancellationAt': Timestamp.fromDate(date),
+    });
+    final restored = TripPost.fromMap('trip-1', map);
+    expect(restored.excludedDriverIds, ['driver-1', 'driver-2']);
+    expect(restored.cancellationCount, 2);
+    expect(restored.lastCancellationBy, 'driver-2');
+    expect(restored.lastCancellationReason, 'Vehicle issue');
+    expect(restored.lastCancellationAt!.isAtSameMomentAs(date), isTrue);
+    expect(restored.toFirestore()['lastCancellationAt'], Timestamp.fromDate(date));
+  });
+
   test('Post origin distinguishes direct and partner trip requests', () {
     for (final entry in {'tourist': 'direct', 'driver': 'partner'}.entries) {
       final post = example(creatorType: entry.key);
@@ -104,6 +136,11 @@ void main() {
       'status',
       'acceptedBidId',
       'acceptedDriverId',
+      'excludedDriverIds',
+      'cancellationCount',
+      'lastCancellationBy',
+      'lastCancellationReason',
+      'lastCancellationAt',
       'createdAt',
       'updatedAt',
     });

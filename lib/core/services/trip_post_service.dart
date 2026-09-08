@@ -153,7 +153,8 @@ class TripPostService {
                             ['open', 'accepted'].contains(post.status)
                       : post.status == 'open' &&
                             !post.scheduledAt.isBefore(now) &&
-                            post.creatorId != user.uid,
+                            post.creatorId != user.uid &&
+                            !post.excludedDriverIds.contains(user.uid),
                 )
                 .toList()
               ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));

@@ -93,7 +93,9 @@ service cloud.firestore {
         'postOrigin', 'touristId', 'driverId', 'pickupLocationText',
         'dropLocationText', 'scheduledAt', 'adultsCount', 'kidsCount',
         'baggageCount', 'vehiclePreference', 'notes', 'status',
-        'acceptedBidId', 'acceptedDriverId', 'createdAt', 'updatedAt'
+        'acceptedBidId', 'acceptedDriverId', 'createdAt', 'updatedAt',
+        'excludedDriverIds', 'cancellationCount', 'lastCancellationBy',
+        'lastCancellationReason', 'lastCancellationAt'
       ];
       return data.keys().hasAll(fields) && data.keys().hasOnly(fields);
     }
@@ -157,7 +159,13 @@ service cloud.firestore {
     }
 
     function validInitialTripState(data) {
-      return data.status == 'open'
+      return data.excludedDriverIds == []
+        && data.cancellationCount is int
+        && data.cancellationCount == 0
+        && data.lastCancellationBy == null
+        && data.lastCancellationReason == null
+        && data.lastCancellationAt == null
+        && data.status == 'open'
         && data.acceptedBidId == null
         && data.acceptedDriverId == null
         && data.scheduledAt is timestamp
@@ -235,7 +243,10 @@ service cloud.firestore {
 
       allow get: if isSignedIn() && canGetTripPost(resource.data);
       allow list: if isSignedIn() && canListTripPost(resource.data);
-      allow update: if isSignedIn() && validTripAcceptance(tripId);
+      allow update: if isSignedIn()
+        && (validTripAcceptance(tripId)
+          || validCancellation(tripId, resource.data, request.resource.data)
+          || validOpenCreatorCancellation(tripId, resource.data, request.resource.data));
       allow delete: if false;
     }
 
@@ -271,6 +282,7 @@ service cloud.firestore {
       return exists(tripPath)
         && get(tripPath).data.status == 'open'
         && get(tripPath).data.creatorId != request.auth.uid
+        && !(request.auth.uid in get(tripPath).data.get('excludedDriverIds', []))
         && get(tripPath).data.scheduledAt is timestamp
         && get(tripPath).data.scheduledAt > request.time;
     }
@@ -341,7 +353,7 @@ service cloud.firestore {
     }
 
     match /trip_posts/{tripId}/bids/{bidId} {
-      // Fixed driver UID prevents duplicates; only creator acceptance may update a bid.
+      // Fixed driver UID prevents duplicates; updates require atomic acceptance or cancellation.
       allow create: if isSignedIn()
         && exactBidFields(request.resource.data)
         && request.resource.data.id is string
@@ -357,8 +369,153 @@ service cloud.firestore {
           || canDriverReadOwnBid(bidId, resource.data));
       // Parent ownership is query-compatible; non-creator drivers cannot list bids.
       allow list: if isSignedIn() && canCreatorReadBids(tripId);
-      allow update: if isSignedIn() && validSelectedBidAcceptance(tripId, bidId);
+      allow update: if isSignedIn()
+        && (validSelectedBidAcceptance(tripId, bidId)
+          || validCancelledBid(tripId, bidId));
       allow delete: if false;
+    }
+
+    function cancellationReasonLabel(code) {
+      return {
+        'vehicle_issue': 'Vehicle issue',
+        'personal_emergency': 'Personal emergency',
+        'scheduling_conflict': 'Scheduling conflict',
+        'unable_to_complete_trip': 'Unable to complete trip',
+        'plans_changed': 'Plans changed',
+        'trip_no_longer_required': 'Trip no longer required',
+        'date_or_time_changed': 'Date or time changed',
+        'found_another_arrangement': 'Found another arrangement',
+        'other': 'Other'
+      }[code];
+    }
+
+    function validCancellationRecord(data, tripId, before, byDriver) {
+      let fields = ['id', 'tripId', 'cancelledByUid', 'cancelledByRole',
+        'reasonCode', 'reasonText', 'penaltyApplied', 'previousStatus',
+        'resultingStatus', 'cancelledAt'];
+      return data.keys().hasAll(fields) && data.keys().hasOnly(fields)
+        && data.id == before.acceptedBidId && data.tripId == tripId
+        && data.cancelledByUid == request.auth.uid
+        && data.cancelledByRole == (byDriver ? 'driver' : 'creator')
+        && data.reasonCode in (byDriver
+          ? ['vehicle_issue', 'personal_emergency', 'scheduling_conflict', 'unable_to_complete_trip', 'other']
+          : ['plans_changed', 'trip_no_longer_required', 'date_or_time_changed', 'found_another_arrangement', 'other'])
+        && data.reasonText is string && data.reasonText.size() <= 500
+        && (data.reasonText == '' || data.reasonText.matches('^\\S([\\s\\S]*\\S)?$'))
+        && (data.reasonCode != 'other' || data.reasonText.size() > 0)
+        && data.penaltyApplied is bool
+        && data.penaltyApplied == (before.scheduledAt - request.time < duration.value(2, 'h'))
+        && data.previousStatus == 'accepted'
+        && data.resultingStatus == (byDriver ? 'open' : 'cancelled')
+        && data.cancelledAt == request.time;
+    }
+
+    // Shared reciprocal validation: each of the three writes requires the other
+    // two. Missing legacy parent fields get defaults only for this transition.
+    function validCancellation(tripId, before, after) {
+      let byDriver = before.creatorId != request.auth.uid;
+      let bidPath = /databases/$(database)/documents/trip_posts/$(tripId)/bids/$(before.acceptedBidId);
+      let historyPath = /databases/$(database)/documents/trip_posts/$(tripId)/cancellations/$(before.acceptedBidId);
+      let history = getAfter(historyPath).data;
+      let excluded = before.get('excludedDriverIds', []);
+      return hasActiveProfile()
+        && before.status == 'accepted'
+        && before.acceptedBidId is string && before.acceptedBidId.size() > 0
+        && before.acceptedDriverId == before.acceptedBidId
+        && (byDriver
+          ? hasActiveBidReadProfile('driver') && before.acceptedDriverId == request.auth.uid
+          : before.creatorId == request.auth.uid)
+        && after.diff(before).affectedKeys().hasOnly([
+          'status', 'acceptedBidId', 'acceptedDriverId', 'excludedDriverIds',
+          'cancellationCount', 'lastCancellationBy', 'lastCancellationReason',
+          'lastCancellationAt', 'updatedAt'
+        ])
+        && after.status == (byDriver ? 'open' : 'cancelled')
+        && after.acceptedBidId == null && after.acceptedDriverId == null
+        && after.excludedDriverIds is list
+        && (byDriver
+          ? !(request.auth.uid in excluded)
+            && after.excludedDriverIds == excluded.concat([request.auth.uid])
+          : after.excludedDriverIds == excluded)
+        && after.cancellationCount is int
+        && after.cancellationCount == before.get('cancellationCount', 0) + 1
+        && after.lastCancellationBy == request.auth.uid
+        && after.lastCancellationAt == request.time && after.updatedAt == request.time
+        && !exists(historyPath)
+        && validCancellationRecord(history, tripId, before, byDriver)
+        && after.lastCancellationReason == (history.reasonText == ''
+          ? cancellationReasonLabel(history.reasonCode)
+          : cancellationReasonLabel(history.reasonCode) + ': ' + history.reasonText)
+        && get(bidPath).data.status == 'accepted'
+        && get(bidPath).data.tripId == tripId
+        && get(bidPath).data.driverId == before.acceptedDriverId
+        && getAfter(bidPath).data.status == (byDriver ? 'cancelled' : 'trip_cancelled')
+        && getAfter(bidPath).data.updatedAt == request.time
+        && getAfter(bidPath).data.diff(get(bidPath).data).affectedKeys().hasOnly(['status', 'updatedAt']);
+    }
+
+    function validCancelledBid(tripId, bidId) {
+      let parentPath = /databases/$(database)/documents/trip_posts/$(tripId);
+      let before = get(parentPath).data;
+      return before.acceptedBidId == bidId
+        && validCancellation(tripId, before, getAfter(parentPath).data);
+    }
+
+    // Withdrawal of an unassigned post is separate from accepted cancellation.
+    // Creator UID cannot be an accepted bid ID on this creator-owned trip.
+    function validOpenCreatorCancellation(tripId, before, after) {
+      let historyPath = /databases/$(database)/documents/trip_posts/$(tripId)/cancellations/$(before.creatorId);
+      let history = getAfter(historyPath).data;
+      let fields = ['id', 'tripId', 'cancelledByUid', 'cancelledByRole',
+        'reasonCode', 'reasonText', 'penaltyApplied', 'previousStatus',
+        'resultingStatus', 'cancelledAt'];
+      return hasActiveProfile()
+        && before.creatorId == request.auth.uid
+        && before.status == 'open'
+        && before.acceptedBidId == null && before.acceptedDriverId == null
+        && after.status == 'cancelled'
+        && after.acceptedBidId == null && after.acceptedDriverId == null
+        && after.diff(before).affectedKeys().hasOnly([
+          'status', 'lastCancellationBy', 'lastCancellationReason',
+          'lastCancellationAt', 'updatedAt'
+        ])
+        && after.lastCancellationBy == request.auth.uid
+        && after.lastCancellationAt == request.time && after.updatedAt == request.time
+        && !exists(historyPath)
+        && history.keys().hasAll(fields) && history.keys().hasOnly(fields)
+        && history.id == before.creatorId && history.tripId == tripId
+        && history.cancelledByUid == request.auth.uid
+        && history.cancelledByRole == 'creator'
+        && history.previousStatus == 'open' && history.resultingStatus == 'cancelled'
+        && history.penaltyApplied == false
+        && history.cancelledAt == request.time
+        && history.reasonCode in ['plans_changed', 'trip_no_longer_required',
+          'date_or_time_changed', 'found_another_arrangement', 'other']
+        && history.reasonText is string && history.reasonText.size() <= 500
+        && (history.reasonText == '' || history.reasonText.matches('^\\S([\\s\\S]*\\S)?$'))
+        && (history.reasonCode != 'other' || history.reasonText.size() > 0)
+        && after.lastCancellationReason == (history.reasonText == ''
+          ? cancellationReasonLabel(history.reasonCode)
+          : cancellationReasonLabel(history.reasonCode) + ': ' + history.reasonText);
+    }
+
+    match /trip_posts/{tripId}/cancellations/{cancellationId} {
+      allow create: if isSignedIn()
+        && ((cancellationId == get(/databases/$(database)/documents/trip_posts/$(tripId)).data.acceptedBidId
+          && validCancellation(tripId,
+            get(/databases/$(database)/documents/trip_posts/$(tripId)).data,
+            getAfter(/databases/$(database)/documents/trip_posts/$(tripId)).data))
+          || (cancellationId == get(/databases/$(database)/documents/trip_posts/$(tripId)).data.creatorId
+            && validOpenCreatorCancellation(tripId,
+              get(/databases/$(database)/documents/trip_posts/$(tripId)).data,
+              getAfter(/databases/$(database)/documents/trip_posts/$(tripId)).data)));
+      allow read: if isSignedIn() && hasActiveProfile()
+        && (canCreatorReadBids(tripId)
+          || (hasActiveBidReadProfile('driver')
+            && (cancellationId == request.auth.uid
+              || (resource.data.cancelledByRole == 'driver'
+                && resource.data.cancelledByUid == request.auth.uid))));
+      allow update, delete: if false;
     }
 
     // Includes all other collections and any user subcollections.

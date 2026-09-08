@@ -25,13 +25,16 @@ class TripDetailsScreen extends StatelessWidget {
     );
   }
 
-  void _openBidList(BuildContext context) {
-    Navigator.push(
+  Future<void> _openBidList(BuildContext context) async {
+    final withdrawn = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => TouristBidListScreen(tripPost: tripPost),
       ),
     );
+    if (withdrawn == true && context.mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override

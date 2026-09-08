@@ -4,6 +4,7 @@ import '../../core/models/bid.dart';
 import '../../core/models/trip_post.dart';
 import '../../core/services/bid_service.dart';
 import '../../core/widgets/info_line.dart';
+import '../../core/widgets/trip_cancellation_button.dart';
 import '../trip/trip_details_screen.dart';
 
 class AcceptedDriverTripScreen extends StatefulWidget {
@@ -49,7 +50,7 @@ class _AcceptedDriverTripScreenState extends State<AcceptedDriverTripScreen> {
   @override
   Widget build(BuildContext context) {
     final trip = widget.tripPost;
-    // Read-only real trip details. Contact sharing and trip actions stay deferred.
+    // The own-bid stream verifies the active driver before showing cancellation.
     return TripDetailsScreen(
       tripPost: trip,
       additionalDetails: Card(
@@ -99,6 +100,7 @@ class _AcceptedDriverTripScreenState extends State<AcceptedDriverTripScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  TripCancellationButton(trip: trip, byDriver: true),
                   const Text(
                     'Your accepted bid',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),

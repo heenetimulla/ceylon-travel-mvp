@@ -134,6 +134,10 @@ void main() {
         bid.effectiveStatusFor(trip('accepted', 'other-driver')),
         'closed',
       );
+      expect(bid.copyWith(status: 'cancelled').effectiveStatusFor(trip('open', null)), 'cancelled');
+      expect(bid.copyWith(status: 'cancelled').effectiveStatusFor(trip('accepted', 'other-driver')), 'cancelled');
+      expect(bid.copyWith(status: 'trip_cancelled').effectiveStatusFor(trip('cancelled', null)), 'trip_cancelled');
+      expect(bid.effectiveStatusFor(trip('cancelled', null)), 'trip_cancelled');
       expect(bid.status, 'submitted');
       expect(bid.toFirestore()['status'], 'submitted');
       expect(bid.effectiveStatusFor(trip('open', null)), 'submitted');

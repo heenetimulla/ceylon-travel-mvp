@@ -371,6 +371,13 @@ class BidService {
       if (!trip.exists || tripData == null) {
         throw const BidServiceException('This trip could not be found.');
       }
+      if ((tripData['excludedDriverIds'] as List? ?? const []).contains(
+        user.uid,
+      )) {
+        throw const BidServiceException(
+          'You can no longer bid on this trip because you previously cancelled it.',
+        );
+      }
       if (tripData['status'] != 'open') {
         throw const BidServiceException(
           'This trip is no longer open for bids.',
