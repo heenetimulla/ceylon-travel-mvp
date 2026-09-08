@@ -10,11 +10,13 @@ class TripDetailsScreen extends StatelessWidget {
     required this.tripPost,
     this.showViewBids = false,
     this.showSubmitBid = false,
+    this.additionalDetails,
   });
 
   final TripPost tripPost;
   final bool showViewBids;
   final bool showSubmitBid;
+  final Widget? additionalDetails;
 
   void _openSubmitBid(BuildContext context) {
     Navigator.push(
@@ -152,6 +154,7 @@ class TripDetailsScreen extends StatelessWidget {
                 ),
               ),
             ),
+            ?additionalDetails,
           ],
         ),
       ),

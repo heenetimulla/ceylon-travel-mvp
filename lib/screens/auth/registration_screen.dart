@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/enums/account_type.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/bid_service.dart';
+import '../../core/validation/registration_validation.dart';
 import '../../core/widgets/upload_placeholder.dart';
 import '../driver/driver_home_screen.dart';
 import '../tourist/tourist_home_screen.dart';
@@ -27,7 +29,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final TextEditingController confirmPasswordController =
       TextEditingController();
   final TextEditingController cityController = TextEditingController();
-  final TextEditingController vehicleTypeController = TextEditingController();
+  String? vehicleType;
   final TextEditingController vehicleNumberController = TextEditingController();
   final TextEditingController operatingAreaController = TextEditingController();
   final TextEditingController availableAreasController =
@@ -60,7 +62,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     passwordController.dispose();
     confirmPasswordController.dispose();
     cityController.dispose();
-    vehicleTypeController.dispose();
     vehicleNumberController.dispose();
     operatingAreaController.dispose();
     availableAreasController.dispose();
@@ -126,9 +127,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     if (_isBlank(fullNameController)) {
       return 'Full name is required.';
     }
-    if (_isBlank(phoneController)) {
-      return 'Phone number is required.';
-    }
+    final phoneError = validateRegistrationPhone(phoneController.text);
+    if (phoneError != null) return phoneError;
     if (_isBlank(emailController)) {
       return 'Email is required.';
     }
@@ -148,7 +148,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return 'City / District is required.';
     }
     if (isDriver) {
-      if (_isBlank(vehicleTypeController)) {
+      if (!BidService.vehicleTypes.contains(vehicleType)) {
         return 'Vehicle type is required.';
       }
       if (_isBlank(vehicleNumberController)) {
@@ -194,7 +194,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
     if (isDriver) {
       userDocument.addAll({
-        'vehicleType': vehicleTypeController.text.trim(),
+        'vehicleType': vehicleType,
         'vehicleNumber': vehicleNumberController.text.trim(),
         'operatingArea': operatingAreaController.text.trim(),
         'availableAreas': availableAreasController.text.trim(),
@@ -237,167 +237,182 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Create your account',
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Use one registration form for tourist/user and driver accounts. Your account profile will be saved securely to Firebase.',
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                  const SizedBox(height: 22),
-                  TextField(
-                    controller: fullNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Full name',
-                      prefixIcon: Icon(Icons.person_outline),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone number',
-                      prefixIcon: Icon(Icons.phone_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock_outline),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: confirmPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Confirm password',
-                      prefixIcon: Icon(Icons.lock_reset_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: cityController,
-                    decoration: const InputDecoration(
-                      labelText: 'City / District',
-                      prefixIcon: Icon(Icons.location_city_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Account type selector',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      ChoiceChip(
-                        key: const Key('touristAccountTypeChip'),
-                        label: const Text('Tourist/User'),
-                        selected: selectedAccountType == AccountType.tourist,
-                        onSelected: (_) =>
-                            _selectAccountType(AccountType.tourist),
+          child: AbsorbPointer(
+            absorbing: isRegistering,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 620),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Create your account',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
                       ),
-                      ChoiceChip(
-                        key: const Key('driverAccountTypeChip'),
-                        label: const Text('Driver'),
-                        selected: selectedAccountType == AccountType.driver,
-                        onSelected: (_) =>
-                            _selectAccountType(AccountType.driver),
-                      ),
-                    ],
-                  ),
-                  if (isDriver) ...[
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Use one registration form for tourist/user and driver accounts. Your account profile will be saved securely to Firebase.',
+                      style: TextStyle(color: Colors.black54),
+                    ),
                     const SizedBox(height: 22),
                     TextField(
-                      controller: vehicleTypeController,
+                      controller: fullNameController,
                       decoration: const InputDecoration(
-                        labelText: 'Vehicle type',
-                        hintText: 'Car / Van / SUV',
-                        prefixIcon: Icon(Icons.directions_car_outlined),
+                        labelText: 'Full name',
+                        prefixIcon: Icon(Icons.person_outline),
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
-                      controller: vehicleNumberController,
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
                       decoration: const InputDecoration(
-                        labelText: 'Vehicle number',
-                        prefixIcon: Icon(Icons.confirmation_number_outlined),
+                        labelText: 'Phone number',
+                        prefixIcon: Icon(Icons.phone_outlined),
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
-                      controller: operatingAreaController,
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(
-                        labelText: 'Operating area',
-                        prefixIcon: Icon(Icons.map_outlined),
+                        labelText: 'Email',
+                        prefixIcon: Icon(Icons.email_outlined),
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
-                      controller: availableAreasController,
+                      controller: passwordController,
+                      obscureText: true,
                       decoration: const InputDecoration(
-                        labelText: 'Available areas',
-                        prefixIcon: Icon(Icons.route_outlined),
+                        labelText: 'Password',
+                        prefixIcon: Icon(Icons.lock_outline),
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    const UploadPlaceholder(
-                      title: 'NIC / ID upload placeholder',
-                      subtitle: 'Will upload to Firebase Storage later',
-                      icon: Icons.badge_outlined,
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: confirmPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Confirm password',
+                        prefixIcon: Icon(Icons.lock_reset_outlined),
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    const UploadPlaceholder(
-                      title: 'Selfie verification placeholder',
-                      subtitle: 'Will be reviewed by admin later',
-                      icon: Icons.camera_alt_outlined,
+                    TextField(
+                      controller: cityController,
+                      decoration: const InputDecoration(
+                        labelText: 'City / District',
+                        prefixIcon: Icon(Icons.location_city_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Account type selector',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        ChoiceChip(
+                          key: const Key('touristAccountTypeChip'),
+                          label: const Text('Tourist/User'),
+                          selected: selectedAccountType == AccountType.tourist,
+                          onSelected: (_) =>
+                              _selectAccountType(AccountType.tourist),
+                        ),
+                        ChoiceChip(
+                          key: const Key('driverAccountTypeChip'),
+                          label: const Text('Driver'),
+                          selected: selectedAccountType == AccountType.driver,
+                          onSelected: (_) =>
+                              _selectAccountType(AccountType.driver),
+                        ),
+                      ],
+                    ),
+                    if (isDriver) ...[
+                      const SizedBox(height: 22),
+                      DropdownButtonFormField<String>(
+                        initialValue: vehicleType,
+                        items: [
+                          for (final type in BidService.vehicleTypes)
+                            DropdownMenuItem(value: type, child: Text(type)),
+                        ],
+                        onChanged: isRegistering
+                            ? null
+                            : (value) => setState(() => vehicleType = value),
+                        decoration: const InputDecoration(
+                          labelText: 'Vehicle type',
+                          helperText:
+                              'Your primary vehicle. You may offer a different vehicle for each bid.',
+                          helperMaxLines: 2,
+                          prefixIcon: Icon(Icons.directions_car_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: vehicleNumberController,
+                        decoration: const InputDecoration(
+                          labelText: 'Vehicle number',
+                          prefixIcon: Icon(Icons.confirmation_number_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: operatingAreaController,
+                        decoration: const InputDecoration(
+                          labelText: 'Operating area',
+                          prefixIcon: Icon(Icons.map_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: availableAreasController,
+                        decoration: const InputDecoration(
+                          labelText: 'Available areas',
+                          prefixIcon: Icon(Icons.route_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const UploadPlaceholder(
+                        title: 'NIC / ID upload placeholder',
+                        subtitle: 'Will upload to Firebase Storage later',
+                        icon: Icons.badge_outlined,
+                      ),
+                      const SizedBox(height: 12),
+                      const UploadPlaceholder(
+                        title: 'Selfie verification placeholder',
+                        subtitle: 'Will be reviewed by admin later',
+                        icon: Icons.camera_alt_outlined,
+                      ),
+                    ],
+                    const SizedBox(height: 22),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        key: const Key('createAccountButton'),
+                        onPressed: isRegistering ? null : _createAccount,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          child: isRegistering
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Create Account'),
+                        ),
+                      ),
                     ),
                   ],
-                  const SizedBox(height: 22),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      key: const Key('createAccountButton'),
-                      onPressed: isRegistering ? null : _createAccount,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        child: isRegistering
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Create Account'),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),

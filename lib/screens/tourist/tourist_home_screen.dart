@@ -117,7 +117,7 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
           ),
           const SizedBox(height: 20),
           const Text(
-            'My open trip posts',
+            'My trip posts',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
@@ -130,14 +130,19 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
               if (snapshot.hasError) {
                 return Column(
                   children: [
-                    const Text('Could not load your trip posts. Please try again.'),
-                    TextButton(onPressed: _retryPosts, child: const Text('Retry')),
+                    const Text(
+                      'Could not load your trip posts. Please try again.',
+                    ),
+                    TextButton(
+                      onPressed: _retryPosts,
+                      child: const Text('Retry'),
+                    ),
                   ],
                 );
               }
               final posts = snapshot.data ?? const <TripPost>[];
               if (posts.isEmpty) {
-                return const Text("You haven't created any open trip posts yet.");
+                return const Text("You haven't created any trip posts yet.");
               }
               return Column(
                 children: [

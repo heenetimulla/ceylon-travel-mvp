@@ -24,6 +24,8 @@ service cloud.firestore {
         && data.fullName is string
         && data.email is string
         && data.phoneNumber is string
+        && data.phoneNumber.size() > 0
+        && data.phoneNumber.matches('.*[0-9].*')
         && data.city is string
         && data.accountType in ['tourist', 'driver']
         && data.status == 'active'
@@ -58,7 +60,10 @@ service cloud.firestore {
       ]);
       return data.keys().hasAll(fields)
         && data.keys().hasOnly(fields)
-        && data.vehicleType is string
+        && data.vehicleType in [
+          'TukTuk', 'Small Car', 'Sedan Car', 'Van - Highroof',
+          'Van - Flatroof', 'SUV', 'Bus'
+        ]
         && data.vehicleNumber is string
         && data.operatingArea is string
         && data.availableAreas is string
@@ -161,17 +166,61 @@ service cloud.firestore {
         && data.updatedAt == request.time;
     }
 
-    function canReadTripPost(data) {
+    function hasActiveProfile() {
       let profilePath = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(profilePath)
-        && (
-          (get(profilePath).data.accountType == 'tourist'
-            && get(profilePath).data.status == 'active'
-            && data.touristId == request.auth.uid)
-          || (get(profilePath).data.accountType == 'driver'
-            && get(profilePath).data.status == 'active'
-            && data.status == 'open')
-        );
+        && get(profilePath).data.status == 'active'
+        && get(profilePath).data.accountType in ['tourist', 'driver'];
+    }
+
+    function canListTripPost(data) {
+      return hasActiveProfile()
+        && (data.creatorId == request.auth.uid
+          || (hasActiveBidReadProfile('driver')
+            && (data.status == 'open'
+              || (data.status == 'accepted'
+                && data.acceptedDriverId == request.auth.uid))));
+    }
+
+    function canGetTripPost(data) {
+      return canListTripPost(data)
+        || (hasActiveBidReadProfile('driver')
+          && data.status == 'accepted'
+          && data.acceptedDriverId == request.auth.uid);
+    }
+
+    function isOpenForAcceptance(data) {
+      return data.status == 'open'
+        && data.acceptedBidId == null
+        && data.acceptedDriverId == null
+        && data.scheduledAt is timestamp
+        && data.scheduledAt > request.time;
+    }
+
+    function validTripAcceptance(tripId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let bidPath = /databases/$(database)/documents/trip_posts/$(tripId)/bids/$(after.acceptedBidId);
+      return hasActiveProfile()
+        && before.creatorId == request.auth.uid
+        && isOpenForAcceptance(before)
+        && after.diff(before).affectedKeys().hasOnly([
+          'status', 'acceptedBidId', 'acceptedDriverId', 'updatedAt'
+        ])
+        && after.status == 'accepted'
+        && after.acceptedBidId is string && after.acceptedBidId.size() > 0
+        && after.acceptedDriverId is string && after.acceptedDriverId.size() > 0
+        && after.acceptedDriverId != before.creatorId
+        && after.updatedAt == request.time
+        && exists(bidPath)
+        && get(bidPath).data.status == 'submitted'
+        && get(bidPath).data.tripId == tripId
+        && get(bidPath).data.driverId == after.acceptedDriverId
+        && after.acceptedBidId == after.acceptedDriverId
+        && getAfter(bidPath).data.tripId == tripId
+        && getAfter(bidPath).data.status == 'accepted'
+        && getAfter(bidPath).data.driverId == after.acceptedDriverId
+        && getAfter(bidPath).data.updatedAt == request.time;
     }
 
     match /trip_posts/{tripId} {
@@ -184,8 +233,132 @@ service cloud.firestore {
         && validTripVehicle(request.resource.data)
         && validInitialTripState(request.resource.data);
 
-      allow get, list: if isSignedIn() && canReadTripPost(resource.data);
-      allow update, delete: if false;
+      allow get: if isSignedIn() && canGetTripPost(resource.data);
+      allow list: if isSignedIn() && canListTripPost(resource.data);
+      allow update: if isSignedIn() && validTripAcceptance(tripId);
+      allow delete: if false;
+    }
+
+    function exactBidFields(data) {
+      let fields = [
+        'id', 'tripId', 'driverId', 'driverName', 'driverRating',
+        'completedTrips', 'cancellationRate', 'priceAmount', 'vehicleType',
+        'vehicleDetails', 'vehicleNumber', 'estimatedTripMinutes', 'message', 'status',
+        'createdAt', 'updatedAt'
+      ];
+      return data.keys().hasAll(fields) && data.keys().hasOnly(fields);
+    }
+
+    function validBidDriver(data) {
+      let profilePath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(profilePath)
+        && get(profilePath).data.status == 'active'
+        && get(profilePath).data.accountType == 'driver'
+        && data.driverId == request.auth.uid
+        && data.driverName is string
+        && data.driverName.size() > 0
+        && data.driverName == get(profilePath).data.fullName
+        && data.driverRating is number
+        && data.driverRating == get(profilePath).data.averageRating
+        && data.completedTrips is int
+        && data.completedTrips == get(profilePath).data.completedTripsCount
+        && data.cancellationRate is number
+        && data.cancellationRate == get(profilePath).data.cancellationRate;
+    }
+
+    function validBidTrip(tripId) {
+      let tripPath = /databases/$(database)/documents/trip_posts/$(tripId);
+      return exists(tripPath)
+        && get(tripPath).data.status == 'open'
+        && get(tripPath).data.creatorId != request.auth.uid
+        && get(tripPath).data.scheduledAt is timestamp
+        && get(tripPath).data.scheduledAt > request.time;
+    }
+
+    function validBidOffer(data) {
+      return data.priceAmount is int
+        && data.priceAmount > 0 && data.priceAmount <= 10000000
+        && data.vehicleType in [
+          'TukTuk', 'Small Car', 'Sedan Car', 'Van - Highroof',
+          'Van - Flatroof', 'SUV', 'Bus'
+        ]
+        && data.vehicleDetails is string
+        && data.vehicleDetails.size() > 0
+        && data.vehicleDetails.size() <= 160
+        && data.vehicleNumber is string
+        && data.vehicleNumber.size() > 0
+        && data.vehicleNumber.size() <= 40
+        && data.estimatedTripMinutes is int
+        && data.estimatedTripMinutes >= 1 && data.estimatedTripMinutes <= 10080
+        && data.message is string && data.message.size() <= 500
+        && data.status == 'submitted'
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function hasActiveBidReadProfile(accountType) {
+      let profilePath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(profilePath)
+        && get(profilePath).data.status == 'active'
+        && get(profilePath).data.accountType == accountType;
+    }
+
+    function canCreatorReadBids(tripId) {
+      let tripPath = /databases/$(database)/documents/trip_posts/$(tripId);
+      return hasActiveProfile()
+        && exists(tripPath)
+        && get(tripPath).data.creatorId == request.auth.uid;
+    }
+
+    function canDriverReadOwnBid(bidId, data) {
+      return hasActiveBidReadProfile('driver')
+        && bidId == request.auth.uid
+        && data.driverId == request.auth.uid;
+    }
+
+    function validSelectedBidAcceptance(tripId, bidId) {
+      let parentPath = /databases/$(database)/documents/trip_posts/$(tripId);
+      let parent = get(parentPath).data;
+      let afterParent = getAfter(parentPath).data;
+      return hasActiveProfile()
+        && parent.creatorId == request.auth.uid
+        && isOpenForAcceptance(parent)
+        && resource.data.tripId == tripId
+        && resource.data.driverId is string
+        && resource.data.driverId.size() > 0
+        && resource.data.driverId == bidId
+        && resource.data.driverId != parent.creatorId
+        && resource.data.status == 'submitted'
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'updatedAt'
+        ])
+        && afterParent.status == 'accepted'
+        && afterParent.acceptedBidId == bidId
+        && afterParent.acceptedDriverId == resource.data.driverId
+        && afterParent.updatedAt == request.time;
+    }
+
+    match /trip_posts/{tripId}/bids/{bidId} {
+      // Fixed driver UID prevents duplicates; only creator acceptance may update a bid.
+      allow create: if isSignedIn()
+        && exactBidFields(request.resource.data)
+        && request.resource.data.id is string
+        && request.resource.data.id == bidId
+        && bidId == request.auth.uid
+        && request.resource.data.tripId == tripId
+        && validBidDriver(request.resource.data)
+        && validBidTrip(tripId)
+        && validBidOffer(request.resource.data);
+
+      allow get: if isSignedIn()
+        && (canCreatorReadBids(tripId)
+          || canDriverReadOwnBid(bidId, resource.data));
+      // Parent ownership is query-compatible; non-creator drivers cannot list bids.
+      allow list: if isSignedIn() && canCreatorReadBids(tripId);
+      allow update: if isSignedIn() && validSelectedBidAcceptance(tripId, bidId);
+      allow delete: if false;
     }
 
     // Includes all other collections and any user subcollections.

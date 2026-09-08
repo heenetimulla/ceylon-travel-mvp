@@ -2,49 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/bid.dart';
 import '../../core/models/trip_post.dart';
+import '../../core/services/bid_service.dart';
 import '../../core/widgets/bid_card.dart';
 import '../../core/widgets/info_line.dart';
-import '../chat/trip_chat_screen.dart';
-import '../trip/pending_trip_screen.dart';
-
-const List<Bid> _sampleBids = [
-  Bid(
-    id: 'bid-1',
-    driverName: 'Nimal Perera',
-    driverRating: 4.8,
-    completedTrips: 126,
-    cancellationRate: '0%',
-    vehicleType: 'Van',
-    price: 'LKR 42,000',
-    estimatedTravelTime: '5 hours 30 minutes',
-    message: 'I can pick you up on time and help with luggage.',
-    status: 'submitted',
-  ),
-  Bid(
-    id: 'bid-2',
-    driverName: 'Saman Jayasinghe',
-    driverRating: 4.6,
-    completedTrips: 89,
-    cancellationRate: '10%',
-    vehicleType: 'SUV',
-    price: 'LKR 45,500',
-    estimatedTravelTime: '5 hours',
-    message: 'Comfortable SUV with AC and space for bags.',
-    status: 'submitted',
-  ),
-  Bid(
-    id: 'bid-3',
-    driverName: 'Ruwan Silva',
-    driverRating: 4.9,
-    completedTrips: 212,
-    cancellationRate: '0%',
-    vehicleType: 'Car',
-    price: 'LKR 39,500',
-    estimatedTravelTime: '6 hours',
-    message: 'I know the Ella route well and can stop for photos.',
-    status: 'submitted',
-  ),
-];
 
 class TouristBidListScreen extends StatefulWidget {
   const TouristBidListScreen({super.key, required this.tripPost});
@@ -56,56 +16,46 @@ class TouristBidListScreen extends StatefulWidget {
 }
 
 class _TouristBidListScreenState extends State<TouristBidListScreen> {
-  late List<Bid> bids;
-  String? acceptedBidId;
+  final BidService _bidService = BidService();
+  late Stream<List<Bid>> _bidsStream;
+  late Stream<TripPost> _tripStream;
+  bool _isAccepting = false;
+  String? _savingBidId;
 
   @override
   void initState() {
     super.initState();
-    bids = _sampleBids;
+    _bidsStream = _bidService.watchCreatorBids(widget.tripPost);
+    _tripStream = _bidService.watchCreatorTrip(widget.tripPost);
   }
 
-  Bid? get _acceptedBid {
-    final String? bidId = acceptedBidId;
-    if (bidId == null) return null;
-
-    for (final Bid bid in bids) {
-      if (bid.id == bidId) return bid;
+  @override
+  void didUpdateWidget(covariant TouristBidListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tripPost.id != widget.tripPost.id ||
+        oldWidget.tripPost.creatorId != widget.tripPost.creatorId) {
+      _bidsStream = _bidService.watchCreatorBids(widget.tripPost);
+      _tripStream = _bidService.watchCreatorTrip(widget.tripPost);
     }
-
-    return null;
   }
 
-  void _openPendingTrip(Bid acceptedBid) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PendingTripScreen(
-          tripPost: widget.tripPost,
-          acceptedBid: acceptedBid,
-        ),
-      ),
-    );
+  void _retry() {
+    setState(() {
+      _bidsStream = _bidService.watchCreatorBids(widget.tripPost);
+      _tripStream = _bidService.watchCreatorTrip(widget.tripPost);
+    });
   }
 
-  void _openChat(Bid acceptedBid) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            TripChatScreen(tripPost: widget.tripPost, acceptedBid: acceptedBid),
-      ),
-    );
-  }
-
-  Future<void> _confirmAcceptBid(Bid selectedBid) async {
-    final bool? shouldAccept = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
+  Future<void> _confirmAcceptBid(TripPost trip, Bid bid) async {
+    if (_isAccepting) return;
+    setState(() => _isAccepting = true);
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
           title: const Text('Accept this driver bid?'),
           content: const Text(
-            'After accepting one bid, other bids will be closed and this trip will move to pending trips.',
+            'After accepting this bid, bidding will close for this trip.',
           ),
           actions: [
             TextButton(
@@ -117,145 +67,249 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
               child: const Text('Accept Bid'),
             ),
           ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      setState(() => _savingBidId = bid.id);
+      await _bidService.acceptBid(tripPost: trip, bidId: bid.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bid accepted successfully.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is BidServiceException
+                  ? error.message
+                  : 'Could not accept this bid. Please try again.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAccepting = false;
+          _savingBidId = null;
+        });
+      }
+    }
+  }
+
+  Widget _acceptedSummary(Bid bid) {
+    // TODO: Add contact retrieval only through secure accepted-trip sharing.
+    // Do not read another user's private profile or expose their phone here.
+    return Card(
+      color: const Color(0xFFE0F2F1),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Bid accepted',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text('Driver: ${bid.driverName}'),
+            Text('Price: ${bid.price}'),
+            Text('Vehicle type: ${bid.vehicleType}'),
+            Text('Vehicle details: ${bid.vehicleDetails}'),
+            Text(
+              'Vehicle number: ${bid.vehicleNumber.isEmpty ? 'Not provided' : bid.vehicleNumber}',
+            ),
+            Text('Estimated trip duration: ${bid.estimatedTravelTime}'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBids(TripPost trip) {
+    return StreamBuilder<List<Bid>>(
+      key: ObjectKey(_bidsStream),
+      stream: _bidsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          final error = snapshot.error;
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Text(
+                  error is BidServiceException
+                      ? error.message
+                      : 'Could not load bids. Please try again.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(onPressed: _retry, child: const Text('Retry')),
+              ],
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(height: 12),
+                Text('Loading driver bids...'),
+              ],
+            ),
+          );
+        }
+        final bids = snapshot.data!;
+        if (bids.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              children: [
+                Text('No driver bids yet.'),
+                SizedBox(height: 8),
+                Text(
+                  'New bids will appear here automatically.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.black54),
+                ),
+              ],
+            ),
+          );
+        }
+        return Column(
+          children: [
+            if (trip.status == 'accepted')
+              for (final bid in bids)
+                if (bid.id == trip.acceptedBidId) _acceptedSummary(bid),
+            for (final bid in bids)
+              BidCard(
+                key: ValueKey(bid.id),
+                bid: bid,
+                effectiveStatus: bid.effectiveStatusFor(trip),
+                isSaving: _savingBidId == bid.id,
+                onAccept:
+                    !_isAccepting &&
+                        trip.status == 'open' &&
+                        trip.acceptedBidId == null &&
+                        trip.acceptedDriverId == null &&
+                        bid.effectiveStatusFor(trip) == 'submitted'
+                    ? () => _confirmAcceptBid(trip, bid)
+                    : null,
+              ),
+          ],
         );
       },
-    );
-
-    if (shouldAccept != true) return;
-    if (!mounted) return;
-
-    setState(() {
-      acceptedBidId = selectedBid.id;
-      bids = [
-        for (final Bid bid in bids)
-          bid.copyWith(
-            status: bid.id == selectedBid.id ? 'accepted' : 'closed',
-          ),
-      ];
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Bid accepted. Other bids are now closed.')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final TripPost tripPost = widget.tripPost;
-    final Bid? acceptedBid = _acceptedBid;
-    final bool hasAcceptedBid = acceptedBid != null;
-
     return Scaffold(
       appBar: AppBar(title: const Text('Driver Bids')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(18),
-          children: [
-            Card(
-              color: Colors.white,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Trip summary',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      '${tripPost.pickup} -> ${tripPost.drop}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    InfoLine(
-                      icon: Icons.calendar_month_outlined,
-                      text: tripPost.dateTime,
-                    ),
-                    InfoLine(
-                      icon: Icons.group_outlined,
-                      text: tripPost.passengers,
-                    ),
-                    InfoLine(
-                      icon: Icons.luggage_outlined,
-                      text: tripPost.baggage,
-                    ),
-                  ],
-                ),
+      body: StreamBuilder<TripPost>(
+        key: ObjectKey(_tripStream),
+        stream: _tripStream,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            final error = snapshot.error;
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    error is BidServiceException
+                        ? error.message
+                        : 'Could not load this trip.',
+                    textAlign: TextAlign.center,
+                  ),
+                  TextButton(onPressed: _retry, child: const Text('Retry')),
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
-            const Card(
-              color: Color(0xFFE0F2F1),
-              child: Padding(
-                padding: EdgeInsets.all(14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.lock_outline, color: Color(0xFF0F766E)),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Bids are private. Only you can see driver prices.',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (hasAcceptedBid) ...[
-              const SizedBox(height: 12),
-              Card(
-                color: Colors.white,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Go to Pending Trip',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            );
+          }
+          final tripPost = snapshot.data!;
+          return SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.all(18),
+              children: [
+                Card(
+                  color: Colors.white,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Trip summary',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'This trip is now waiting for the next MVP step.',
-                        style: TextStyle(color: Colors.black54),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${acceptedBid.driverName} accepted at ${acceptedBid.price}',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        onPressed: () => _openPendingTrip(acceptedBid),
-                        child: const Text('Go to Pending Trip'),
-                      ),
-                      const SizedBox(height: 8),
-                      OutlinedButton(
-                        onPressed: () => _openChat(acceptedBid),
-                        child: const Text('Open Chat'),
-                      ),
-                    ],
+                        const SizedBox(height: 10),
+                        Text(
+                          '${tripPost.pickup} -> ${tripPost.drop}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        InfoLine(
+                          icon: Icons.calendar_month_outlined,
+                          text: tripPost.dateTime,
+                        ),
+                        InfoLine(
+                          icon: Icons.group_outlined,
+                          text: tripPost.passengers,
+                        ),
+                        InfoLine(
+                          icon: Icons.luggage_outlined,
+                          text: tripPost.baggage,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            for (final Bid bid in bids)
-              BidCard(bid: bid, onAccept: () => _confirmAcceptBid(bid)),
-          ],
-        ),
+                const SizedBox(height: 12),
+                const Card(
+                  color: Color(0xFFE0F2F1),
+                  child: Padding(
+                    padding: EdgeInsets.all(14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.lock_outline, color: Color(0xFF0F766E)),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Bids are private. Only you can see driver prices.',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildBids(tripPost),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

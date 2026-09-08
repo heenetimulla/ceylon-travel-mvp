@@ -11,35 +11,132 @@ class TripPostService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
 
-  Stream<List<TripPost>> watchTouristPosts() => _watchPosts('tourist');
+  Stream<List<TripPost>> watchTouristPosts() =>
+      _watchPosts('tourist', creatorOnly: true);
+
+  Stream<List<TripPost>> watchCreatorPosts() =>
+      _watchPosts(null, creatorOnly: true);
 
   Stream<List<TripPost>> watchDriverPosts() => _watchPosts('driver');
 
-  Stream<List<TripPost>> _watchPosts(String accountType) async* {
+  Stream<List<TripPost>> watchAcceptedDriverTrips() async* {
     try {
       final user = _auth.currentUser;
       if (user == null) {
-        throw const TripPostServiceException('Please sign in to view trip posts.');
+        throw const TripPostServiceException(
+          'Please sign in to view your accepted trips.',
+        );
       }
-      final profile = await _firestore.collection('users').doc(user.uid).get(
-        const GetOptions(source: Source.server),
-      );
+      final profile = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get(const GetOptions(source: Source.server));
       final data = profile.data();
       if (!profile.exists || data == null) {
         throw const TripPostServiceException(
           'Your profile could not be found. Please sign in again.',
         );
       }
-      if (data['status'] != 'active' || data['accountType'] != accountType) {
+      if (data['status'] != 'active' || data['accountType'] != 'driver') {
+        throw const TripPostServiceException(
+          'Only active driver accounts can view their accepted trips.',
+        );
+      }
+      if (_auth.currentUser?.uid != user.uid) {
+        throw const TripPostServiceException(
+          'Your session changed. Please sign in again.',
+        );
+      }
+      // Both constraints are required by the rules. Never fetch all accepted
+      // trips and filter by driver on the client.
+      final query = _firestore
+          .collection('trip_posts')
+          .where('status', isEqualTo: 'accepted')
+          .where('acceptedDriverId', isEqualTo: user.uid);
+      await for (final snapshot in query.snapshots()) {
+        if (_auth.currentUser?.uid != user.uid) {
+          throw const TripPostServiceException(
+            'Your session changed. Please sign in again.',
+          );
+        }
+        final trips =
+            snapshot.docs.map((doc) => TripPost.fromFirestore(doc)).toList()
+              ..sort((a, b) {
+                final order = a.scheduledAt.compareTo(b.scheduledAt);
+                return order == 0 ? a.id.compareTo(b.id) : order;
+              });
+        yield trips;
+      }
+    } on TripPostServiceException {
+      rethrow;
+    } on FirebaseException catch (error) {
+      switch (error.code) {
+        case 'unauthenticated':
+          throw const TripPostServiceException(
+            'Please sign in again to view your accepted trips.',
+          );
+        case 'permission-denied':
+          throw const TripPostServiceException(
+            'You do not have permission to view these accepted trips.',
+          );
+        case 'unavailable':
+        case 'network-request-failed':
+        case 'deadline-exceeded':
+          throw const TripPostServiceException(
+            'Check your internet connection and try again.',
+          );
+        case 'failed-precondition':
+          throw const TripPostServiceException(
+            'Accepted trips are not available yet. Please contact support.',
+          );
+        default:
+          throw const TripPostServiceException(
+            'Could not load your accepted trips. Please try again.',
+          );
+      }
+    } catch (_) {
+      throw const TripPostServiceException(
+        'Could not load your accepted trips. Please try again.',
+      );
+    }
+  }
+
+  Stream<List<TripPost>> _watchPosts(
+    String? accountType, {
+    bool creatorOnly = false,
+  }) async* {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw const TripPostServiceException(
+          'Please sign in to view trip posts.',
+        );
+      }
+      final profile = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get(const GetOptions(source: Source.server));
+      final data = profile.data();
+      if (!profile.exists || data == null) {
+        throw const TripPostServiceException(
+          'Your profile could not be found. Please sign in again.',
+        );
+      }
+      if (data['status'] != 'active' ||
+          !['tourist', 'driver'].contains(data['accountType']) ||
+          (accountType != null && data['accountType'] != accountType)) {
         throw const TripPostServiceException(
           'Your account cannot view this trip list. Please sign in again.',
         );
       }
-      final isDriver = accountType == 'driver';
       // Single-field queries match the read rules without composite indexes.
-      final query = isDriver
-          ? _firestore.collection('trip_posts').where('status', isEqualTo: 'open')
-          : _firestore.collection('trip_posts').where('touristId', isEqualTo: user.uid);
+      final query = creatorOnly
+          ? _firestore
+                .collection('trip_posts')
+                .where('creatorId', isEqualTo: user.uid)
+          : _firestore
+                .collection('trip_posts')
+                .where('status', isEqualTo: 'open');
       await for (final snapshot in query.snapshots()) {
         if (_auth.currentUser?.uid != user.uid) {
           throw const TripPostServiceException(
@@ -47,20 +144,26 @@ class TripPostService {
           );
         }
         final now = DateTime.now();
-        final posts = snapshot.docs
-            .map((doc) => TripPost.fromFirestore(doc))
-            .where((post) =>
-                post.status == 'open' &&
-                !post.scheduledAt.isBefore(now) &&
-                (!isDriver || post.creatorId != user.uid))
-            .toList()
-          ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+        final posts =
+            snapshot.docs
+                .map((doc) => TripPost.fromFirestore(doc))
+                .where(
+                  (post) => creatorOnly
+                      ? post.creatorId == user.uid &&
+                            ['open', 'accepted'].contains(post.status)
+                      : post.status == 'open' &&
+                            !post.scheduledAt.isBefore(now) &&
+                            post.creatorId != user.uid,
+                )
+                .toList()
+              ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
         yield posts;
       }
     } on TripPostServiceException {
       rethrow;
     } on FirebaseException catch (error) {
-      if (error.code == 'unavailable' || error.code == 'network-request-failed') {
+      if (error.code == 'unavailable' ||
+          error.code == 'network-request-failed') {
         throw const TripPostServiceException(
           'Check your internet connection and try again.',
         );

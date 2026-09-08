@@ -4,15 +4,25 @@ import '../models/bid.dart';
 import 'info_line.dart';
 
 class BidCard extends StatelessWidget {
-  const BidCard({super.key, required this.bid, required this.onAccept});
+  const BidCard({
+    super.key,
+    required this.bid,
+    this.onAccept,
+    this.effectiveStatus,
+    this.isSaving = false,
+  });
 
   final Bid bid;
   final VoidCallback? onAccept;
+  final String? effectiveStatus;
+  final bool isSaving;
 
   @override
   Widget build(BuildContext context) {
-    final String statusText = bid.status.toUpperCase();
-    final bool canAccept = bid.status == 'submitted';
+    final status = effectiveStatus ?? bid.status;
+    final String statusText = status.toUpperCase();
+    final bool canAccept =
+        status == 'submitted' && onAccept != null && !isSaving;
 
     return Card(
       color: Colors.white,
@@ -70,16 +80,25 @@ class BidCard extends StatelessWidget {
             InfoLine(
               icon: Icons.cancel_outlined,
               text:
-                  '${bid.cancellationRate} cancellation rate from last 10 trips',
+                  '${bid.cancellationRateLabel} cancellation rate from last 10 trips',
             ),
             InfoLine(
               icon: Icons.directions_car_outlined,
-              text: bid.vehicleType,
+              text: 'Vehicle type: ${bid.vehicleType}',
+            ),
+            InfoLine(
+              icon: Icons.info_outline,
+              text: 'Vehicle: ${bid.vehicleDetails}',
+            ),
+            InfoLine(
+              icon: Icons.confirmation_number_outlined,
+              text:
+                  'Vehicle number: ${bid.vehicleNumber.isEmpty ? 'Not provided' : bid.vehicleNumber}',
             ),
             InfoLine(icon: Icons.payments_outlined, text: bid.price),
             InfoLine(
               icon: Icons.schedule_outlined,
-              text: bid.estimatedTravelTime,
+              text: 'Estimated trip duration: ${bid.estimatedTravelTime}',
             ),
             InfoLine(icon: Icons.message_outlined, text: bid.message),
             const SizedBox(height: 14),
@@ -87,9 +106,15 @@ class BidCard extends StatelessWidget {
               width: double.infinity,
               child: FilledButton(
                 onPressed: canAccept ? onAccept : null,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Accept Bid'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Accept Bid'),
                 ),
               ),
             ),
