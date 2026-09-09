@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/completed_trip.dart';
@@ -68,10 +71,7 @@ class CompletedTripsScreen extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                trip.route,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+              Text(trip.route, style: AppTextStyles.cardTitle),
               const SizedBox(height: 12),
               Text('Driver: ${trip.driverName}'),
               Text('Customer: ${trip.touristName}'),
@@ -121,13 +121,13 @@ class CompletedTripsScreen extends StatelessWidget {
     final List<CompletedTrip> completedTrips = _completedTrips;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Completed Trips')),
+      appBar: AppPageAppBar(title: const Text('Completed Trips')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(18),
+          padding: appPagePadding(context),
           children: [
             const Card(
-              color: Color(0xFFE0F2F1),
+              color: AppColors.softBlue,
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Column(
@@ -135,10 +135,7 @@ class CompletedTripsScreen extends StatelessWidget {
                   children: [
                     Text(
                       'Week 2 MVP rating rules',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppTextStyles.cardTitle,
                     ),
                     SizedBox(height: 10),
                     InfoLine(
@@ -190,7 +187,7 @@ class _CompletedTripCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: Colors.white,
+      color: AppColors.surface,
       margin: const EdgeInsets.only(bottom: 14),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -200,27 +197,9 @@ class _CompletedTripCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    trip.route,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                Expanded(child: Text(trip.route, style: AppTextStyles.section)),
                 const SizedBox(width: 10),
-                Chip(
-                  label: Text(
-                    trip.status,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  backgroundColor: const Color(0xFFE0F2F1),
-                  side: BorderSide.none,
-                ),
+                AppStatusChip(trip.status),
               ],
             ),
             const SizedBox(height: 10),

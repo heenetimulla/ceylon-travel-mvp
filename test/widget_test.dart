@@ -18,10 +18,7 @@ Future<void> pumpToWelcome(WidgetTester tester) async {
   await tester.pump(const Duration(seconds: 2));
   await tester.pump();
 
-  expect(
-    find.text('Replace travel WhatsApp groups with one smart app'),
-    findsOneWidget,
-  );
+  expect(find.text('Discover Sri Lanka, your way'), findsOneWidget);
   expect(find.text('Login'), findsOneWidget);
   expect(find.text('Register'), findsOneWidget);
   expect(find.text('View Demo Flow'), findsOneWidget);
@@ -48,6 +45,7 @@ void main() {
     expect(tester.widget<TextField>(passwordField).controller!.text, isEmpty);
 
     await tester.enterText(emailField, 'another@example.com');
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Login'));
     await tester.tap(find.widgetWithText(FilledButton, 'Login'));
     await tester.pumpAndSettle();
 
@@ -91,12 +89,14 @@ void main() {
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
 
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Login'));
     await tester.tap(find.widgetWithText(FilledButton, 'Login'));
     await tester.pumpAndSettle();
 
     expect(find.text('Email is required.'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextField, 'Email'), '   ');
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Login'));
     await tester.tap(find.widgetWithText(FilledButton, 'Login'));
     await tester.pumpAndSettle();
     expect(find.text('Email is required.'), findsOneWidget);
@@ -105,6 +105,7 @@ void main() {
       find.widgetWithText(TextField, 'Email'),
       'tourist@example.com',
     );
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Login'));
     await tester.tap(find.widgetWithText(FilledButton, 'Login'));
     await tester.pumpAndSettle();
     expect(find.text('Password is required.'), findsOneWidget);
@@ -158,8 +159,8 @@ void main() {
     expect(find.text('Vehicle number'), findsOneWidget);
     expect(find.text('Operating area'), findsOneWidget);
     expect(find.text('Available areas'), findsOneWidget);
-    expect(find.text('NIC / ID upload placeholder'), findsOneWidget);
-    expect(find.text('Selfie verification placeholder'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Identity document'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Photo verification'), findsOneWidget);
 
     await tester.enterText(
       find.widgetWithText(TextField, 'Full name'),

@@ -1,3 +1,5 @@
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/bid.dart';
@@ -54,7 +56,7 @@ class _AcceptedDriverTripScreenState extends State<AcceptedDriverTripScreen> {
     return TripDetailsScreen(
       tripPost: trip,
       additionalDetails: Card(
-        color: Colors.white,
+        color: AppColors.surface,
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: StreamBuilder<Bid?>(
@@ -101,10 +103,7 @@ class _AcceptedDriverTripScreenState extends State<AcceptedDriverTripScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TripCancellationButton(trip: trip, byDriver: true),
-                  const Text(
-                    'Your accepted bid',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
+                  const Text('Your accepted bid', style: AppTextStyles.section),
                   const SizedBox(height: 12),
                   InfoLine(
                     icon: Icons.payments_outlined,

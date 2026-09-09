@@ -1,3 +1,4 @@
+import '../../core/widgets/app_components.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
@@ -41,7 +42,7 @@ class _AcceptedDriverTripsScreenState extends State<AcceptedDriverTripsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My accepted trips')),
+      appBar: AppPageAppBar(title: const Text('My accepted trips')),
       body: SafeArea(
         child: StreamBuilder<List<TripPost>>(
           key: ObjectKey(_trips),
@@ -91,15 +92,17 @@ class _AcceptedDriverTripsScreenState extends State<AcceptedDriverTripsScreen> {
               return const Center(
                 child: Padding(
                   padding: EdgeInsets.all(18),
-                  child: Text(
-                    'No accepted trips yet.\nTrips will appear here when your bid is accepted.',
-                    textAlign: TextAlign.center,
+                  child: AppEmptyState(
+                    title: 'No accepted trips yet.',
+                    message:
+                        'Trips will appear here when your bid is accepted.',
+                    icon: Icons.assignment_turned_in_outlined,
                   ),
                 ),
               );
             }
             return ListView.builder(
-              padding: const EdgeInsets.all(18),
+              padding: appPagePadding(context),
               itemCount: trips.length,
               itemBuilder: (context, index) {
                 final trip = trips[index];

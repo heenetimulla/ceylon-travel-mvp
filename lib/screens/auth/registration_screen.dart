@@ -1,3 +1,5 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -233,7 +235,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Register')),
+      appBar: AppPageAppBar(contentWidth: 620, title: const Text('Register')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -242,20 +244,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 620),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: AppInfoCard(
                   children: [
+                    const AppBrandHeader(),
                     const Text(
                       'Create your account',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppTextStyles.title,
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Use one registration form for tourist/user and driver accounts. Your account profile will be saved securely to Firebase.',
-                      style: TextStyle(color: Colors.black54),
+                      'Plan your journey or offer your driving services. Choose your account type below.',
+                      style: AppTextStyles.secondary,
                     ),
                     const SizedBox(height: 22),
                     TextField(
@@ -312,7 +311,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     const SizedBox(height: 18),
                     const Text(
                       'Account type selector',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      style: AppTextStyles.cardTitle,
                     ),
                     const SizedBox(height: 10),
                     Wrap(
@@ -338,6 +337,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     if (isDriver) ...[
                       const SizedBox(height: 22),
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: vehicleType,
                         items: [
                           for (final type in BidService.vehicleTypes)
@@ -380,14 +380,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       ),
                       const SizedBox(height: 14),
                       const UploadPlaceholder(
-                        title: 'NIC / ID upload placeholder',
-                        subtitle: 'Will upload to Firebase Storage later',
+                        title: 'Identity document',
+                        subtitle: 'Document upload will be available soon.',
                         icon: Icons.badge_outlined,
                       ),
                       const SizedBox(height: 12),
                       const UploadPlaceholder(
-                        title: 'Selfie verification placeholder',
-                        subtitle: 'Will be reviewed by admin later',
+                        title: 'Photo verification',
+                        subtitle: 'Photo verification will be available soon.',
                         icon: Icons.camera_alt_outlined,
                       ),
                     ],
@@ -397,9 +397,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       child: FilledButton(
                         key: const Key('createAccountButton'),
                         onPressed: isRegistering ? null : _createAccount,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          child: isRegistering
+                        child: isRegistering
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
@@ -408,7 +406,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                   ),
                                 )
                               : const Text('Create Account'),
-                        ),
                       ),
                     ),
                   ],

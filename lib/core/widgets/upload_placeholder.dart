@@ -1,3 +1,5 @@
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 class UploadPlaceholder extends StatelessWidget {
@@ -15,10 +17,10 @@ class UploadPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: Colors.white,
+      color: AppColors.surface,
       child: ListTile(
-        leading: Icon(icon, color: const Color(0xFF0F766E)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        leading: Icon(icon, color: AppColors.ocean),
+        title: Text(title, style: AppTextStyles.cardTitle),
         subtitle: Text(subtitle),
         trailing: const Icon(Icons.upload_file),
       ),

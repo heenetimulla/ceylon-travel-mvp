@@ -1,3 +1,5 @@
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../models/trip_cancellation.dart';
@@ -37,8 +39,11 @@ class _TripCancellationButtonState extends State<TripCancellationButton> {
           context: context,
           barrierDismissible: false,
           builder: (dialogContext) => AlertDialog(
-            icon: Icon(Icons.warning_amber_rounded,
-                color: Theme.of(dialogContext).colorScheme.error, size: 40),
+            icon: Icon(
+              Icons.warning_amber_rounded,
+              color: Theme.of(dialogContext).colorScheme.error,
+              size: 40,
+            ),
             title: const Text('Cancel this trip?'),
             content: const Text(
               'This trip will be permanently cancelled and will not reopen for bidding.\n\n'
@@ -88,7 +93,7 @@ class _TripCancellationButtonState extends State<TripCancellationButton> {
                     penalty
                         ? 'This cancellation is within 2 hours of the trip and will count toward your cancellation record.'
                         : 'No cancellation penalty will apply because the trip is more than 2 hours away.',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    style: AppTextStyles.cardTitle,
                   ),
                 ],
               ),
@@ -157,6 +162,10 @@ class _TripCancellationButtonState extends State<TripCancellationButton> {
 
   @override
   Widget build(BuildContext context) => OutlinedButton.icon(
+    style: OutlinedButton.styleFrom(
+      foregroundColor: AppColors.error,
+      side: const BorderSide(color: AppColors.error),
+    ),
     onPressed: _dialogOpen ? null : _open,
     icon: const Icon(Icons.cancel_outlined),
     label: const Text('Cancel Trip'),
@@ -216,10 +225,9 @@ class _CancellationDialogState extends State<_CancellationDialog> {
     final reasons = widget.byDriver
         ? driverCancellationReasons
         : creatorCancellationReasons;
-    final penalty = widget.trip.status == 'accepted' && cancellationPenaltyApplies(
-      widget.trip.scheduledAt,
-      DateTime.now(),
-    );
+    final penalty =
+        widget.trip.status == 'accepted' &&
+        cancellationPenaltyApplies(widget.trip.scheduledAt, DateTime.now());
     return PopScope(
       canPop: !_saving,
       child: AlertDialog(
@@ -284,7 +292,7 @@ class _CancellationDialogState extends State<_CancellationDialog> {
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                  Text(_error!, style: AppTextStyles.error),
                 ],
               ],
             ),
@@ -296,6 +304,10 @@ class _CancellationDialogState extends State<_CancellationDialog> {
             child: const Text('Keep Trip'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: AppColors.surface,
+            ),
             onPressed: _saving ? null : _save,
             child: _saving
                 ? const SizedBox(

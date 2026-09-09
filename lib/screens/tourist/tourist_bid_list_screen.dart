@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/bid.dart';
@@ -104,16 +107,13 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
     // TODO: Add contact retrieval only through secure accepted-trip sharing.
     // Do not read another user's private profile or expose their phone here.
     return Card(
-      color: const Color(0xFFE0F2F1),
+      color: AppColors.softBlue,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Bid accepted',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
+            const Text('Bid accepted', style: AppTextStyles.section),
             const SizedBox(height: 12),
             Text('Driver: ${bid.driverName}'),
             Text('Price: ${bid.price}'),
@@ -170,19 +170,10 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
         }
         final bids = snapshot.data!;
         if (bids.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Column(
-              children: [
-                Text('No driver bids yet.'),
-                SizedBox(height: 8),
-                Text(
-                  'New bids will appear here automatically.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.black54),
-                ),
-              ],
-            ),
+          return const AppEmptyState(
+            title: 'No driver bids yet.',
+            message: 'New bids will appear here automatically.',
+            icon: Icons.local_offer_outlined,
           );
         }
         return Column(
@@ -214,7 +205,7 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Driver Bids')),
+      appBar: AppPageAppBar(title: const Text('Driver Bids')),
       body: StreamBuilder<TripPost>(
         key: ObjectKey(_tripStream),
         stream: _tripStream,
@@ -244,10 +235,10 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
           final tripPost = snapshot.data!;
           return SafeArea(
             child: ListView(
-              padding: const EdgeInsets.all(18),
+              padding: appPagePadding(context),
               children: [
                 Card(
-                  color: Colors.white,
+                  color: AppColors.surface,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -255,18 +246,12 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
                       children: [
                         const Text(
                           'Trip summary',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: AppTextStyles.section,
                         ),
                         const SizedBox(height: 10),
                         Text(
                           '${tripPost.pickup} -> ${tripPost.drop}',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: AppTextStyles.cardTitle,
                         ),
                         const SizedBox(height: 8),
                         InfoLine(
@@ -287,18 +272,18 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
                 ),
                 const SizedBox(height: 12),
                 const Card(
-                  color: Color(0xFFE0F2F1),
+                  color: AppColors.softBlue,
                   child: Padding(
                     padding: EdgeInsets.all(14),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.lock_outline, color: Color(0xFF0F766E)),
+                        Icon(Icons.lock_outline, color: AppColors.ocean),
                         SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             'Bids are private. Only you can see driver prices.',
-                            style: TextStyle(fontWeight: FontWeight.w600),
+                            style: AppTextStyles.cardTitle,
                           ),
                         ),
                       ],
@@ -306,7 +291,8 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (['open', 'accepted'].contains(tripPost.status) && !_isAccepting)
+                if (['open', 'accepted'].contains(tripPost.status) &&
+                    !_isAccepting)
                   TripCancellationButton(trip: tripPost, byDriver: false),
                 if (tripPost.status == 'cancelled')
                   const Text('This trip has been cancelled.'),

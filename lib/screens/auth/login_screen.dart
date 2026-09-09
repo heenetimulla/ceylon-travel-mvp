@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -161,24 +164,24 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
+      appBar: AppPageAppBar(contentWidth: 520, title: const Text('Login')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 520),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: AppInfoCard(
                 children: [
+                  const AppBrandHeader(),
                   const Text(
                     'Login to Ceylon Travel',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    style: AppTextStyles.title,
                   ),
                   const SizedBox(height: 8),
                   const Text(
                     'Use your email address and password to access your account.',
-                    style: TextStyle(color: Colors.black54),
+                    style: AppTextStyles.secondary,
                   ),
                   const SizedBox(height: 28),
                   TextField(
@@ -210,17 +213,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 10),
                   const Text(
                     'Welcome back. Sign in to continue your journey.',
-                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                    style: AppTextStyles.caption,
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: _isLoading ? null : _login,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('Login'),
-                      ),
+                      child: Text('Login'),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -241,18 +241,18 @@ class LoginInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Card(
-      color: Colors.white,
+      color: AppColors.surface,
       child: Padding(
         padding: EdgeInsets.all(16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.info_outline, color: Color(0xFF0F766E)),
+            Icon(Icons.info_outline, color: AppColors.ocean),
             SizedBox(width: 12),
             Expanded(
               child: Text(
                 'Sign in with the email address you used to register your tourist or driver account.',
-                style: TextStyle(color: Colors.black54),
+                style: AppTextStyles.secondary,
               ),
             ),
           ],

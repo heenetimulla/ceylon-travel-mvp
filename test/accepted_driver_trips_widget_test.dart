@@ -64,7 +64,8 @@ void main() {
       final trip = acceptedTrip();
       controller.add([trip]);
       await tester.pumpAndSettle();
-      expect(find.text('Colombo Airport -> Ella Hotel'), findsOneWidget);
+      expect(find.text('Colombo Airport'), findsOneWidget);
+      expect(find.text('Ella Hotel'), findsOneWidget);
       expect(find.text(trip.dateTime), findsOneWidget);
       expect(find.text('2 adults, 1 kid'), findsOneWidget);
       expect(find.text('3 bags'), findsOneWidget);
@@ -105,7 +106,8 @@ void main() {
       await tester.tap(find.text('Retry'));
       await tester.pumpAndSettle();
       expect(subscriptions, 2);
-      expect(find.text('Colombo Airport -> Ella Hotel'), findsOneWidget);
+      expect(find.text('Colombo Airport'), findsOneWidget);
+      expect(find.text('Ella Hotel'), findsOneWidget);
     },
   );
 
@@ -129,7 +131,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('accepted'), findsOneWidget);
+      expect(find.text('ACCEPTED'), findsOneWidget);
       expect(find.text('Colombo Airport'), findsOneWidget);
       expect(find.text('Ella Hotel'), findsOneWidget);
       expect(find.text(trip.dateTime), findsOneWidget);

@@ -1,3 +1,5 @@
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -53,12 +55,19 @@ class _UserIdentityHeaderState extends State<UserIdentityHeader> {
         final value = snapshot.hasError ? null : snapshot.data?['fullName'];
         final fullName = value is String ? value.trim() : '';
 
-        return Row(
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
           children: [
             CircleAvatar(
               radius: 26,
-              backgroundColor: const Color(0xFFE0F2F1),
-              foregroundColor: const Color(0xFF0F766E),
+              backgroundColor: AppColors.softBlue,
+              foregroundColor: AppColors.ocean,
               child: isLoading
                   ? const SizedBox(
                       width: 20,
@@ -74,19 +83,24 @@ class _UserIdentityHeaderState extends State<UserIdentityHeader> {
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Text(
-                isLoading
-                    ? 'Loading profile...'
-                    : fullName.isEmpty
-                    ? 'User'
-                    : fullName,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('CEYLON TRAVEL', style: AppTextStyles.caption),
+                  const SizedBox(height: 4),
+                  Text(
+                    isLoading
+                        ? 'Loading profile...'
+                        : fullName.isEmpty
+                        ? 'User'
+                        : fullName,
+                    style: AppTextStyles.section,
+                  ),
+                ],
               ),
             ),
           ],
+          ),
         );
       },
     );

@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/completed_trip.dart';
@@ -36,33 +39,21 @@ class _RatingScreenState extends State<RatingScreen> {
     final CompletedTrip trip = widget.completedTrip;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Rate Trip')),
+      appBar: AppPageAppBar(title: const Text('Rate Trip')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(18),
+          padding: appPagePadding(context),
           children: [
             Card(
-              color: Colors.white,
+              color: AppColors.surface,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Trip summary',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    const Text('Trip summary', style: AppTextStyles.section),
                     const SizedBox(height: 10),
-                    Text(
-                      trip.route,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    Text(trip.route, style: AppTextStyles.cardTitle),
                     const SizedBox(height: 8),
                     InfoLine(
                       icon: Icons.local_taxi_outlined,
@@ -86,19 +77,13 @@ class _RatingScreenState extends State<RatingScreen> {
             ),
             const SizedBox(height: 12),
             const Card(
-              color: Color(0xFFE0F2F1),
+              color: AppColors.softBlue,
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Week 2 MVP',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    Text('Week 2 MVP', style: AppTextStyles.cardTitle),
                     SizedBox(height: 10),
                     InfoLine(
                       icon: Icons.people_outline,
@@ -119,10 +104,7 @@ class _RatingScreenState extends State<RatingScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            const Text(
-              'Star rating',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
+            const Text('Star rating', style: AppTextStyles.cardTitle),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -137,7 +119,7 @@ class _RatingScreenState extends State<RatingScreen> {
                     },
                     icon: Icon(
                       value <= selectedRating ? Icons.star : Icons.star_border,
-                      color: const Color(0xFF0F766E),
+                      color: AppColors.ocean,
                       size: 34,
                     ),
                   ),
@@ -158,10 +140,7 @@ class _RatingScreenState extends State<RatingScreen> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: _submitRating,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 14),
-                  child: Text('Submit Rating'),
-                ),
+                child: Text('Submit Rating'),
               ),
             ),
           ],

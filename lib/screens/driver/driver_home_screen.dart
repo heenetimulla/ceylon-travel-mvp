@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
@@ -66,31 +69,33 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AppPageAppBar(
         title: const Text('Driver Dashboard'),
         actions: const [LogoutButton()],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(18),
+        padding: appPagePadding(context),
         children: [
           const UserIdentityHeader(),
           const SizedBox(height: 20),
-          const Text(
-            'Open trip posts',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
+          const Text('Your driver workspace', style: AppTextStyles.section),
           const SizedBox(height: 8),
           const Text(
             'Drivers choose their own bid price. Bids stay private for the post creator.',
-            style: TextStyle(color: Colors.black54),
+            style: AppTextStyles.secondary,
           ),
           const SizedBox(height: 14),
+          const AppSectionHeader(
+            'Partner Hires',
+            spacious: true,
+            subtitle: 'Create and manage hires for your customers.',
+          ),
           Card(
-            color: Colors.white,
+            color: AppColors.surface,
             child: ListTile(
               leading: const Icon(
                 Icons.post_add_outlined,
-                color: Color(0xFF0F766E),
+                color: AppColors.ocean,
               ),
               title: const Text('Create Hire Post'),
               subtitle: const Text('Post a hire for your customer.'),
@@ -99,8 +104,18 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CreatorTripPostsScreen()),
+            ),
+            icon: const Icon(Icons.list_alt_outlined),
+            label: const Text('My hire posts'),
+          ),
+          const SizedBox(height: 12),
+          const AppSectionHeader('Assigned Work', spacious: true),
           Card(
-            color: const Color(0xFFE0F2F1),
+            color: AppColors.softBlue,
             child: ListTile(
               leading: const Icon(Icons.assignment_turned_in_outlined),
               title: const Text('My accepted trips'),
@@ -115,27 +130,20 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CreatorTripPostsScreen()),
-            ),
-            icon: const Icon(Icons.list_alt_outlined),
-            label: const Text('My hire posts'),
-          ),
-          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => _openCompletedTrips(context),
               icon: const Icon(Icons.done_all_outlined),
-              label: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('Completed Trips'),
-              ),
+              label: Text('Completed Trips'),
             ),
           ),
           const SizedBox(height: 18),
+          const AppSectionHeader(
+            'Available Trips',
+            spacious: true,
+            subtitle: 'Explore requests and send a private offer.',
+          ),
           StreamBuilder<List<TripPost>>(
             stream: _posts,
             builder: (context, snapshot) {
@@ -155,8 +163,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               }
               final posts = snapshot.data ?? const <TripPost>[];
               if (posts.isEmpty) {
-                return const Text(
-                  'No open trip posts are available right now.',
+                return const AppEmptyState(
+                  title: 'No trips available',
+                  message:
+                      'No open trip posts are available right now. Check back for new requests.',
                 );
               }
               return Column(

@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../welcome_screen.dart';
@@ -25,7 +28,7 @@ class PlaceholderDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AppPageAppBar(contentWidth: 520,
         title: Text(title),
         actions: [
           IconButton(
@@ -41,27 +44,24 @@ class PlaceholderDashboard extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Card(
-              color: Colors.white,
+              color: AppColors.surface,
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, size: 80, color: const Color(0xFF0F766E)),
+                    Icon(icon, size: 80, color: AppColors.ocean),
                     const SizedBox(height: 20),
                     Text(
                       title,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppTextStyles.title,
                     ),
                     const SizedBox(height: 12),
                     Text(
                       subtitle,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.black54),
+                      style: AppTextStyles.secondary,
                     ),
                     const SizedBox(height: 24),
                     FilledButton(

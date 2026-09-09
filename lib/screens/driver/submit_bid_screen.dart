@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
@@ -110,32 +113,23 @@ class _SubmitBidScreenState extends State<SubmitBidScreen> {
     final TripPost tripPost = widget.tripPost;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Submit Bid')),
+      appBar: AppPageAppBar(title: const Text('Submit Bid')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(18),
+          padding: appPagePadding(context),
           children: [
             Card(
-              color: Colors.white,
+              color: AppColors.surface,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Trip summary',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    const Text('Trip summary', style: AppTextStyles.section),
                     const SizedBox(height: 10),
                     Text(
                       '${tripPost.pickup} -> ${tripPost.drop}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppTextStyles.cardTitle,
                     ),
                     const SizedBox(height: 8),
                     InfoLine(
@@ -155,79 +149,107 @@ class _SubmitBidScreenState extends State<SubmitBidScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            TextField(
-              controller: bidPriceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Bid price (LKR)',
-                prefixIcon: Icon(Icons.payments_outlined),
-              ),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: vehicleType,
-              decoration: const InputDecoration(labelText: 'Vehicle type'),
-              items: [
-                for (final type in BidService.vehicleTypes)
-                  DropdownMenuItem(value: type, child: Text(type)),
-              ],
-              onChanged: _isSaving
-                  ? null
-                  : (value) => setState(() => vehicleType = value),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: vehicleDetailsController,
-              maxLength: 160,
-              decoration: const InputDecoration(
-                labelText: 'Vehicle details',
-                hintText: 'Model, make, year and color',
-                prefixIcon: Icon(Icons.directions_car_outlined),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: vehicleNumberController,
-              maxLength: 40,
-              decoration: const InputDecoration(
-                labelText: 'Vehicle number',
-                hintText:
-                    'Registration number of the vehicle offered for this trip',
-                prefixIcon: Icon(Icons.confirmation_number_outlined),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text('Estimated trip duration'),
-            const SizedBox(height: 8),
-            Row(
+            AppInfoCard(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: hoursController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Hours'),
+                const AppSectionHeader(
+                  'Your offer',
+                  subtitle: 'Set the price for this trip in Sri Lankan rupees.',
+                ),
+                TextField(
+                  style: AppTextStyles.title,
+                  controller: bidPriceController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Bid price (LKR)',
+                    prefixIcon: Icon(Icons.payments_outlined),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: minutesController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Minutes'),
+                const SizedBox(height: 12),
+              ],
+            ),
+            AppInfoCard(
+              children: [
+                const AppSectionHeader(
+                  'Vehicle',
+                  subtitle:
+                      'Help the customer identify the vehicle you are offering.',
+                ),
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: vehicleType,
+                  decoration: const InputDecoration(labelText: 'Vehicle type'),
+                  items: [
+                    for (final type in BidService.vehicleTypes)
+                      DropdownMenuItem(value: type, child: Text(type)),
+                  ],
+                  onChanged: _isSaving
+                      ? null
+                      : (value) => setState(() => vehicleType = value),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: vehicleDetailsController,
+                  maxLength: 160,
+                  decoration: const InputDecoration(
+                    labelText: 'Vehicle details',
+                    hintText: 'Model, make, year and color',
+                    prefixIcon: Icon(Icons.directions_car_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: vehicleNumberController,
+                  maxLength: 40,
+                  decoration: const InputDecoration(
+                    labelText: 'Vehicle number',
+                    hintText:
+                        'Registration number of the vehicle offered for this trip',
+                    prefixIcon: Icon(Icons.confirmation_number_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+            AppInfoCard(
+              children: [
+                const AppSectionHeader('Estimated trip duration'),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: hoursController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Hours'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: minutesController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Minutes'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
+            ),
+            AppInfoCard(
+              children: [
+                const AppSectionHeader('Message'),
+                TextField(
+                  controller: messageController,
+                  maxLines: 4,
+                  maxLength: 500,
+                  decoration: const InputDecoration(
+                    labelText: 'Short message',
+                    hintText: 'Example: I can pick you up on time.',
+                    prefixIcon: Icon(Icons.message_outlined),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: messageController,
-              maxLines: 4,
-              maxLength: 500,
-              decoration: const InputDecoration(
-                labelText: 'Short message',
-                hintText: 'Example: I can pick you up on time.',
-                prefixIcon: Icon(Icons.message_outlined),
-              ),
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
@@ -239,10 +261,7 @@ class _SubmitBidScreenState extends State<SubmitBidScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.send),
-              label: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Text(_isSaving ? 'Submitting...' : 'Submit Bid'),
-              ),
+              label: Text(_isSaving ? 'Submitting...' : 'Submit Bid'),
             ),
           ],
         ),

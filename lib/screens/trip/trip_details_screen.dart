@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
@@ -42,120 +45,99 @@ class TripDetailsScreen extends StatelessWidget {
     final bool hasActions = showViewBids || showSubmitBid;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Trip Details')),
+      appBar: AppPageAppBar(title: const Text('Trip Details')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(18),
+          padding: appPagePadding(context),
           children: [
-            Card(
-              color: Colors.white,
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Chip(
-                      label: Text(
-                        tripPost.status,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      backgroundColor: const Color(0xFFE0F2F1),
-                      side: BorderSide.none,
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      '${tripPost.pickup} -> ${tripPost.drop}',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    _DetailRow(
-                      icon: Icons.my_location_outlined,
-                      label: 'Pickup location',
-                      value: tripPost.pickup,
-                    ),
-                    _DetailRow(
-                      icon: Icons.location_on_outlined,
-                      label: 'Drop location',
-                      value: tripPost.drop,
-                    ),
-                    _DetailRow(
-                      icon: Icons.calendar_month_outlined,
-                      label: 'Date and time',
-                      value: tripPost.dateTime,
-                    ),
-                    _DetailRow(
-                      icon: Icons.person_outline,
-                      label: 'Posted by',
-                      value: tripPost.creatorName,
-                    ),
-                    _DetailRow(
-                      icon: Icons.account_circle_outlined,
-                      label: 'Creator type',
-                      value: tripPost.creatorTypeLabel,
-                    ),
-                    _DetailRow(
-                      icon: Icons.group_outlined,
-                      label: 'Adults count',
-                      value: tripPost.adults.toString(),
-                    ),
-                    _DetailRow(
-                      icon: Icons.child_care_outlined,
-                      label: 'Kids count',
-                      value: tripPost.kids.toString(),
-                    ),
-                    _DetailRow(
-                      icon: Icons.luggage_outlined,
-                      label: 'Baggage count',
-                      value: tripPost.baggageCount.toString(),
-                    ),
-                    _DetailRow(
-                      icon: Icons.directions_car_outlined,
-                      label: 'Vehicle preference',
-                      value: tripPost.vehiclePreference,
-                    ),
-                    _DetailRow(
-                      icon: Icons.notes_outlined,
-                      label: 'Notes',
-                      value: tripPost.notes,
-                    ),
-                    if (hasActions) ...[
-                      const SizedBox(height: 18),
-                      if (showViewBids)
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () => _openBidList(context),
-                            icon: const Icon(Icons.visibility_outlined),
-                            label: const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Text('View Bids'),
-                            ),
-                          ),
-                        ),
-                      if (showViewBids && showSubmitBid)
-                        const SizedBox(height: 10),
-                      if (showSubmitBid)
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            onPressed: () => _openSubmitBid(context),
-                            icon: const Icon(Icons.local_taxi_outlined),
-                            label: const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Text('Submit Bid'),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ],
+            AppInfoCard(
+              children: [
+                AppStatusChip(tripPost.status),
+                const AppSectionHeader('Route'),
+                AppRoute(pickup: tripPost.pickup, destination: tripPost.drop),
+              ],
+            ),
+            AppInfoCard(
+              children: [
+                const AppSectionHeader('Schedule & passengers'),
+                _DetailRow(
+                  icon: Icons.calendar_month_outlined,
+                  label: 'Date and time',
+                  value: tripPost.dateTime,
                 ),
-              ),
+                _DetailRow(
+                  icon: Icons.group_outlined,
+                  label: 'Adults count',
+                  value: tripPost.adults.toString(),
+                ),
+                _DetailRow(
+                  icon: Icons.child_care_outlined,
+                  label: 'Kids count',
+                  value: tripPost.kids.toString(),
+                ),
+                _DetailRow(
+                  icon: Icons.luggage_outlined,
+                  label: 'Baggage count',
+                  value: tripPost.baggageCount.toString(),
+                ),
+              ],
+            ),
+            AppInfoCard(
+              children: [
+                const AppSectionHeader('Vehicle & notes'),
+                _DetailRow(
+                  icon: Icons.directions_car_outlined,
+                  label: 'Vehicle preference',
+                  value: tripPost.vehiclePreference,
+                ),
+                _DetailRow(
+                  icon: Icons.notes_outlined,
+                  label: 'Notes',
+                  value: tripPost.notes,
+                ),
+              ],
+            ),
+            AppInfoCard(
+              children: [
+                const AppSectionHeader('Posted by'),
+                _DetailRow(
+                  icon: Icons.person_outline,
+                  label: 'Name',
+                  value: tripPost.creatorName,
+                ),
+                _DetailRow(
+                  icon: Icons.account_circle_outlined,
+                  label: 'Creator type',
+                  value: tripPost.creatorTypeLabel,
+                ),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (hasActions) ...[
+                  const SizedBox(height: 18),
+                  if (showViewBids)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _openBidList(context),
+                        icon: const Icon(Icons.visibility_outlined),
+                        label: Text('View Bids'),
+                      ),
+                    ),
+                  if (showViewBids && showSubmitBid) const SizedBox(height: 10),
+                  if (showSubmitBid)
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => _openSubmitBid(context),
+                        icon: const Icon(Icons.local_taxi_outlined),
+                        label: Text('Submit Bid'),
+                      ),
+                    ),
+                ],
+              ],
             ),
             ?additionalDetails,
           ],
@@ -183,27 +165,15 @@ class _DetailRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 22, color: const Color(0xFF0F766E)),
+          Icon(icon, size: 22, color: AppColors.ocean),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Text(label, style: AppTextStyles.caption),
                 const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                Text(value, style: AppTextStyles.cardTitle),
               ],
             ),
           ),

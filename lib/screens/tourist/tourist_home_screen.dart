@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
@@ -56,7 +59,7 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AppPageAppBar(
         title: const Text('Tourist Dashboard'),
         actions: [
           const LogoutButton(),
@@ -67,46 +70,42 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(18),
+        padding: appPagePadding(context),
         children: [
           const UserIdentityHeader(),
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F766E),
-              borderRadius: BorderRadius.circular(24),
+              color: AppColors.softBlue,
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Need a driver for your Sri Lanka trip?',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppTextStyles.title,
                 ),
                 const SizedBox(height: 8),
                 const Text(
                   'Post your pickup, drop, passenger count, baggage, date and time. Drivers will send private bids.',
-                  style: TextStyle(color: Colors.white70),
+                  style: AppTextStyles.secondary,
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF0F766E),
+                    backgroundColor: AppColors.ocean,
+                    foregroundColor: AppColors.surface,
                   ),
                   onPressed: () => _openCreateTripPost(context),
-                  child: const Text('Create Trip / Hire Post'),
+                  child: const Text('Create Trip'),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white70),
+                    foregroundColor: AppColors.ocean,
+                    side: const BorderSide(color: AppColors.border),
                   ),
                   onPressed: () => _openCompletedTrips(context),
                   icon: const Icon(Icons.done_all_outlined),
@@ -116,9 +115,10 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'My trip posts',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          const AppSectionHeader(
+            'My Trips',
+            spacious: true,
+            subtitle: 'Your requests and current travel plans.',
           ),
           const SizedBox(height: 12),
           StreamBuilder<List<TripPost>>(
@@ -142,7 +142,10 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
               }
               final posts = snapshot.data ?? const <TripPost>[];
               if (posts.isEmpty) {
-                return const Text("You haven't created any trip posts yet.");
+                return const AppEmptyState(
+                  title: 'Your next journey starts here',
+                  message: "You haven't created any trip posts yet.",
+                );
               }
               return Column(
                 children: [

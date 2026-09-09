@@ -1,3 +1,5 @@
+import '../core/widgets/app_components.dart';
+import '../app/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 import 'auth/account_type_screen.dart';
@@ -40,32 +42,25 @@ class WelcomeScreen extends StatelessWidget {
               child: Column(
                 children: [
                   const SizedBox(height: 30),
-                  const Icon(
-                    Icons.groups_2_rounded,
-                    size: 82,
-                    color: Color(0xFF0F766E),
-                  ),
+                  const AppBrandHeader(),
                   const SizedBox(height: 24),
                   const Text(
-                    'Replace travel WhatsApp groups with one smart app',
+                    'Discover Sri Lanka, your way',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    style: AppTextStyles.title,
                   ),
                   const SizedBox(height: 14),
                   const Text(
-                    'Tourists post trips. Drivers send private bids. Tourist accepts one bid. Then they can chat, complete the trip, and rate each other.',
+                    'Find a driver for your next journey. Share your plans, compare private offers, and travel with confidence.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16, color: Colors.black54),
+                    style: AppTextStyles.secondary,
                   ),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: () => _openLogin(context),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('Login'),
-                      ),
+                      child: Text('Login'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -73,10 +68,7 @@ class WelcomeScreen extends StatelessWidget {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () => _openRegister(context),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('Register'),
-                      ),
+                      child: Text('Register'),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -84,10 +76,7 @@ class WelcomeScreen extends StatelessWidget {
                     width: double.infinity,
                     child: OutlinedButton(
                       onPressed: () => _openDemoFlow(context),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('View Demo Flow'),
-                      ),
+                      child: Text('View Demo Flow'),
                     ),
                   ),
                   const SizedBox(height: 30),

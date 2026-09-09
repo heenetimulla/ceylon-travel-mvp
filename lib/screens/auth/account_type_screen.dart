@@ -1,3 +1,4 @@
+import '../../app/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/enums/account_type.dart';
@@ -40,12 +41,12 @@ class AccountTypeScreen extends StatelessWidget {
           children: [
             const Text(
               'How will you use Ceylon Travel?',
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+              style: AppTextStyles.title,
             ),
             const SizedBox(height: 8),
             const Text(
               'This decides which dashboard you will see.',
-              style: TextStyle(color: Colors.black54),
+              style: AppTextStyles.secondary,
             ),
             const SizedBox(height: 22),
             AccountTypeCard(

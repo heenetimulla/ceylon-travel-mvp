@@ -1,3 +1,6 @@
+import 'app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../models/bid.dart';
@@ -20,12 +23,11 @@ class BidCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = effectiveStatus ?? bid.status;
-    final String statusText = status.replaceAll('_', ' ').toUpperCase();
     final bool canAccept =
         status == 'submitted' && onAccept != null && !isSaving;
 
     return Card(
-      color: Colors.white,
+      color: AppColors.surface,
       margin: const EdgeInsets.only(bottom: 14),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -36,43 +38,31 @@ class BidCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const CircleAvatar(
-                  backgroundColor: Color(0xFFE0F2F1),
-                  child: Icon(Icons.person_outline, color: Color(0xFF0F766E)),
+                  backgroundColor: AppColors.softBlue,
+                  child: Icon(Icons.person_outline, color: AppColors.ocean),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        bid.driverName,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      Text(bid.driverName, style: AppTextStyles.cardTitle),
                       const SizedBox(height: 4),
                       Text(
                         'Rating ${bid.driverRating.toStringAsFixed(1)}',
-                        style: const TextStyle(color: Colors.black54),
+                        style: AppTextStyles.secondary,
                       ),
                     ],
                   ),
                 ),
-                Chip(
-                  label: Text(
-                    statusText,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  backgroundColor: const Color(0xFFE0F2F1),
-                  side: BorderSide.none,
-                ),
               ],
             ),
             const SizedBox(height: 12),
+            AppStatusChip(status),
+            const SizedBox(height: 16),
+            Text(bid.price, style: AppTextStyles.title),
+            const Text('Offered trip price', style: AppTextStyles.caption),
+            const Divider(),
             InfoLine(
               icon: Icons.check_circle_outline,
               text: '${bid.completedTrips} completed trips',
@@ -90,12 +80,28 @@ class BidCard extends StatelessWidget {
               icon: Icons.info_outline,
               text: 'Vehicle: ${bid.vehicleDetails}',
             ),
-            InfoLine(
-              icon: Icons.confirmation_number_outlined,
-              text:
-                  'Vehicle number: ${bid.vehicleNumber.isEmpty ? 'Not provided' : bid.vehicleNumber}',
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.pearl,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Vehicle registration',
+                    style: AppTextStyles.caption,
+                  ),
+                  Text(
+                    'Vehicle number: ${bid.vehicleNumber.isEmpty ? 'Not provided' : bid.vehicleNumber}',
+                    style: AppTextStyles.cardTitle,
+                  ),
+                ],
+              ),
             ),
-            InfoLine(icon: Icons.payments_outlined, text: bid.price),
             InfoLine(
               icon: Icons.schedule_outlined,
               text: 'Estimated trip duration: ${bid.estimatedTravelTime}',
@@ -103,19 +109,15 @@ class BidCard extends StatelessWidget {
             InfoLine(icon: Icons.message_outlined, text: bid.message),
             const SizedBox(height: 14),
             SizedBox(
-              width: double.infinity,
               child: FilledButton(
                 onPressed: canAccept ? onAccept : null,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: isSaving
+                child: isSaving
                       ? const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Text('Accept Bid'),
-                ),
               ),
             ),
           ],

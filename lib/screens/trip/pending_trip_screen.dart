@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/bid.dart';
@@ -77,13 +80,13 @@ class _PendingTripScreenState extends State<PendingTripScreen> {
     final Bid acceptedBid = widget.acceptedBid;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Pending Trip')),
+      appBar: AppPageAppBar(title: const Text('Pending Trip')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(18),
+          padding: appPagePadding(context),
           children: [
             Card(
-              color: Colors.white,
+              color: AppColors.surface,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -91,10 +94,7 @@ class _PendingTripScreenState extends State<PendingTripScreen> {
                   children: [
                     Text(
                       '${tripPost.pickup} -> ${tripPost.drop}',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppTextStyles.section,
                     ),
                     const SizedBox(height: 10),
                     InfoLine(
@@ -110,24 +110,14 @@ class _PendingTripScreenState extends State<PendingTripScreen> {
                       text: tripPost.baggage,
                     ),
                     const SizedBox(height: 10),
-                    const Chip(
-                      label: Text(
-                        'PENDING',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      backgroundColor: Color(0xFFE0F2F1),
-                      side: BorderSide.none,
-                    ),
+                    const AppStatusChip('PENDING'),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 12),
             Card(
-              color: Colors.white,
+              color: AppColors.surface,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -135,10 +125,7 @@ class _PendingTripScreenState extends State<PendingTripScreen> {
                   children: [
                     const Text(
                       'Driver / customer info',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppTextStyles.cardTitle,
                     ),
                     const SizedBox(height: 10),
                     InfoLine(
@@ -169,19 +156,13 @@ class _PendingTripScreenState extends State<PendingTripScreen> {
             ),
             const SizedBox(height: 12),
             const Card(
-              color: Color(0xFFE0F2F1),
+              color: AppColors.softBlue,
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Trip rules',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    Text('Trip rules', style: AppTextStyles.cardTitle),
                     SizedBox(height: 10),
                     InfoLine(
                       icon: Icons.play_circle_outline,
@@ -211,10 +192,7 @@ class _PendingTripScreenState extends State<PendingTripScreen> {
             FilledButton.icon(
               onPressed: () => _openChat(context),
               icon: const Icon(Icons.chat_bubble_outline),
-              label: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('Open Chat'),
-              ),
+              label: Text('Open Chat'),
             ),
             const SizedBox(height: 10),
             OutlinedButton(
@@ -236,7 +214,7 @@ class _PendingTripScreenState extends State<PendingTripScreen> {
             if (isCompletedConfirmed) ...[
               const SizedBox(height: 10),
               Card(
-                color: Colors.white,
+                color: AppColors.surface,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -244,15 +222,12 @@ class _PendingTripScreenState extends State<PendingTripScreen> {
                     children: [
                       const Text(
                         'Trip completed',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: AppTextStyles.cardTitle,
                       ),
                       const SizedBox(height: 8),
                       const Text(
                         'You can now open completed trips and add the Week 2 demo rating.',
-                        style: TextStyle(color: Colors.black54),
+                        style: AppTextStyles.secondary,
                       ),
                       const SizedBox(height: 12),
                       SizedBox(
@@ -260,10 +235,7 @@ class _PendingTripScreenState extends State<PendingTripScreen> {
                         child: FilledButton.icon(
                           onPressed: () => _openCompletedTrips(context),
                           icon: const Icon(Icons.done_all_outlined),
-                          label: const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            child: Text('Open Completed Trips'),
-                          ),
+                          label: Text('Open Completed Trips'),
                         ),
                       ),
                     ],

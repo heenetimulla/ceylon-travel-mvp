@@ -1,3 +1,6 @@
+import '../../core/widgets/app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -76,7 +79,7 @@ class TripChatScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Card(
-                color: Colors.white,
+                color: AppColors.surface,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -84,10 +87,7 @@ class TripChatScreen extends StatelessWidget {
                     children: [
                       Text(
                         '${tripPost.pickup} -> ${tripPost.drop}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: AppTextStyles.cardTitle,
                       ),
                       const SizedBox(height: 8),
                       InfoLine(
@@ -99,17 +99,7 @@ class TripChatScreen extends StatelessWidget {
                         text: acceptedBid.price,
                       ),
                       const SizedBox(height: 8),
-                      const Chip(
-                        label: Text(
-                          'PENDING',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        backgroundColor: Color(0xFFE0F2F1),
-                        side: BorderSide.none,
-                      ),
+                      const AppStatusChip('PENDING'),
                     ],
                   ),
                 ),
@@ -194,7 +184,7 @@ class _ChatBubble extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Chip(
             label: Text('${message.message} - ${message.time}'),
-            backgroundColor: const Color(0xFFE0F2F1),
+            backgroundColor: AppColors.softBlue,
             side: BorderSide.none,
           ),
         ),
@@ -206,7 +196,7 @@ class _ChatBubble extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: Card(
-          color: message.isMe ? const Color(0xFF0F766E) : Colors.white,
+          color: message.isMe ? AppColors.ocean : AppColors.surface,
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -214,10 +204,9 @@ class _ChatBubble extends StatelessWidget {
               children: [
                 Text(
                   message.senderName,
-                  style: TextStyle(
-                    color: message.isMe ? Colors.white70 : Colors.black54,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: message.isMe
+                      ? AppTextStyles.onOcean
+                      : AppTextStyles.caption,
                 ),
                 const SizedBox(height: 6),
                 if (isLocation)
@@ -229,16 +218,17 @@ class _ChatBubble extends StatelessWidget {
                         children: [
                           Icon(
                             Icons.location_on_outlined,
-                            color: message.isMe ? Colors.white : Colors.black87,
+                            color: message.isMe
+                                ? AppColors.surface
+                                : AppColors.charcoal,
                           ),
                           const SizedBox(width: 6),
                           Text(
                             'Location shared',
-                            style: TextStyle(
+                            style: AppTextStyles.body.copyWith(
                               color: message.isMe
-                                  ? Colors.white
-                                  : Colors.black87,
-                              fontWeight: FontWeight.bold,
+                                  ? AppColors.surface
+                                  : AppColors.charcoal,
                             ),
                           ),
                         ],
@@ -246,7 +236,9 @@ class _ChatBubble extends StatelessWidget {
                       TextButton(
                         onPressed: () {},
                         style: TextButton.styleFrom(
-                          foregroundColor: message.isMe ? Colors.white : null,
+                          foregroundColor: message.isMe
+                              ? AppColors.surface
+                              : null,
                         ),
                         child: const Text('Open in Maps'),
                       ),
@@ -255,17 +247,18 @@ class _ChatBubble extends StatelessWidget {
                 else
                   Text(
                     message.message,
-                    style: TextStyle(
-                      color: message.isMe ? Colors.white : Colors.black87,
+                    style: AppTextStyles.body.copyWith(
+                      color: message.isMe
+                          ? AppColors.surface
+                          : AppColors.charcoal,
                     ),
                   ),
                 const SizedBox(height: 6),
                 Text(
                   message.time,
-                  style: TextStyle(
-                    color: message.isMe ? Colors.white70 : Colors.black45,
-                    fontSize: 12,
-                  ),
+                  style: message.isMe
+                      ? AppTextStyles.onOcean
+                      : AppTextStyles.caption,
                 ),
               ],
             ),

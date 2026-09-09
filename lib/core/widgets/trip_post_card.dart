@@ -1,3 +1,6 @@
+import 'app_components.dart';
+import '../../app/app_text_styles.dart';
+import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../models/trip_post.dart';
@@ -21,49 +24,51 @@ class TripPostCard extends StatelessWidget {
 
     return Card(
       clipBehavior: Clip.antiAlias,
-      color: Colors.white,
-      margin: const EdgeInsets.only(bottom: 14),
+      color: AppColors.surface,
+      margin: const EdgeInsets.only(bottom: 18),
       child: InkWell(
         onTap: onViewDetails,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Chip(
-                label: Text(
-                  tripPost.status,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                backgroundColor: const Color(0xFFE0F2F1),
-                side: BorderSide.none,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  AppStatusChip(tripPost.status),
+                  Text(tripPost.creatorTypeLabel, style: AppTextStyles.caption),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                '${tripPost.pickup} -> ${tripPost.drop}',
-                style: const TextStyle(
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 20),
+              AppRoute(pickup: tripPost.pickup, destination: tripPost.drop),
+              const Divider(height: 32),
               InfoLine(
                 icon: Icons.calendar_month_outlined,
                 text: tripPost.dateTime,
+                emphasized: true,
               ),
+              const SizedBox(height: 4),
               InfoLine(
                 icon: Icons.person_outline,
                 text: tripPost.postedByLabel,
+                emphasized: true,
               ),
+              const SizedBox(height: 10),
               InfoLine(icon: Icons.group_outlined, text: tripPost.passengers),
               InfoLine(icon: Icons.luggage_outlined, text: tripPost.baggage),
+              InfoLine(
+                icon: Icons.directions_car_outlined,
+                text: tripPost.vehiclePreference,
+              ),
               if (hasActions) ...[
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                const SizedBox(height: 20),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     if (onViewDetails != null)
                       TextButton(
@@ -71,7 +76,6 @@ class TripPostCard extends StatelessWidget {
                         child: const Text('View Details'),
                       ),
                     if (onSubmitBid != null) ...[
-                      const SizedBox(width: 8),
                       FilledButton(
                         onPressed: onSubmitBid,
                         child: const Text('Submit Bid'),

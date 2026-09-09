@@ -1,3 +1,4 @@
+import '../../core/widgets/app_components.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
@@ -24,7 +25,7 @@ class _CreatorTripPostsScreenState extends State<CreatorTripPostsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My hire posts')),
+      appBar: AppPageAppBar(title: const Text('My hire posts')),
       body: StreamBuilder<List<TripPost>>(
         key: ObjectKey(_posts),
         stream: _posts,
@@ -53,11 +54,14 @@ class _CreatorTripPostsScreenState extends State<CreatorTripPostsScreen> {
           final posts = snapshot.data!;
           if (posts.isEmpty) {
             return const Center(
-              child: Text("You haven't created any hire posts yet."),
+              child: AppEmptyState(
+                title: 'Your hires, organized',
+                message: "You haven't created any hire posts yet.",
+              ),
             );
           }
           return ListView(
-            padding: const EdgeInsets.all(18),
+            padding: appPagePadding(context),
             children: [
               for (final trip in posts)
                 TripPostCard(
