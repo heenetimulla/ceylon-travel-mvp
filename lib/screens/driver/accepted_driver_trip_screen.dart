@@ -1,3 +1,4 @@
+import '../trip/lifecycle_trip_screen.dart';
 import '../../app/app_text_styles.dart';
 import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
@@ -51,6 +52,7 @@ class _AcceptedDriverTripScreenState extends State<AcceptedDriverTripScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.watchBid == null) return LifecycleTripScreen(tripId: widget.tripPost.id);
     final trip = widget.tripPost;
     // The own-bid stream verifies the active driver before showing cancellation.
     return TripDetailsScreen(

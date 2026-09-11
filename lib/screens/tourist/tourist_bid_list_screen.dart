@@ -1,3 +1,4 @@
+import '../trip/lifecycle_trip_screen.dart';
 import '../../core/widgets/app_components.dart';
 import '../../app/app_text_styles.dart';
 import '../../app/app_colors.dart';
@@ -178,7 +179,7 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
         }
         return Column(
           children: [
-            if (trip.status == 'accepted')
+            if (TripPost.assignedStatuses.contains(trip.status))
               for (final bid in bids)
                 if (bid.id == trip.acceptedBidId) _acceptedSummary(bid),
             for (final bid in bids)
@@ -296,6 +297,8 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
                   TripCancellationButton(trip: tripPost, byDriver: false),
                 if (tripPost.status == 'cancelled')
                   const Text('This trip has been cancelled.'),
+                if (TripPost.assignedStatuses.contains(tripPost.status))
+                  FilledButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LifecycleTripScreen(tripId: tripPost.id))), child: const Text('Manage Trip / View Status')),
                 _buildBids(tripPost),
               ],
             ),

@@ -1,9 +1,11 @@
+import '../auth/account_screen.dart';
 import '../../core/widgets/app_components.dart';
 import '../../app/app_text_styles.dart';
 import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
+import '../../core/models/active_trip_order.dart';
 import '../../core/services/trip_post_service.dart';
 import '../../core/widgets/trip_post_card.dart';
 import '../../core/widgets/user_identity_header.dart';
@@ -13,7 +15,9 @@ import '../trip/create_trip_post_screen.dart';
 import '../trip/trip_details_screen.dart';
 
 class TouristHomeScreen extends StatefulWidget {
-  const TouristHomeScreen({super.key});
+  const TouristHomeScreen({super.key, this.postsStream, this.loadProfile});
+  final Stream<List<TripPost>>? postsStream;
+  final Future<Map<String, dynamic>?> Function()? loadProfile;
 
   @override
   State<TouristHomeScreen> createState() => _TouristHomeScreenState();
@@ -25,11 +29,11 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _posts = TripPostService().watchTouristPosts();
+    _posts = widget.postsStream ?? TripPostService().watchTouristPosts();
   }
 
   void _retryPosts() {
-    setState(() => _posts = TripPostService().watchTouristPosts());
+    setState(() => _posts = widget.postsStream ?? TripPostService().watchTouristPosts());
   }
 
   void _openCreateTripPost(BuildContext context) {
@@ -62,6 +66,7 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
       appBar: AppPageAppBar(
         title: const Text('Tourist Dashboard'),
         actions: [
+          IconButton(tooltip: 'Account & Support', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen())), icon: const Icon(Icons.account_circle_outlined)),
           const LogoutButton(),
           IconButton(
             onPressed: () {},
@@ -72,7 +77,7 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
       body: ListView(
         padding: appPagePadding(context),
         children: [
-          const UserIdentityHeader(),
+          UserIdentityHeader(loadProfile: widget.loadProfile),
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(20),
@@ -140,7 +145,7 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
                   ],
                 );
               }
-              final posts = snapshot.data ?? const <TripPost>[];
+              final posts = orderedActiveTrips(snapshot.data ?? const <TripPost>[]);
               if (posts.isEmpty) {
                 return const AppEmptyState(
                   title: 'Your next journey starts here',

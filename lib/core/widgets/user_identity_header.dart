@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import 'profile_avatar.dart';
 
 class UserIdentityHeader extends StatefulWidget {
   const UserIdentityHeader({super.key, this.loadProfile});
@@ -39,13 +40,6 @@ class _UserIdentityHeaderState extends State<UserIdentityHeader> {
     return document.data();
   }
 
-  String _initials(String fullName) {
-    final names = fullName.split(RegExp(r'\s+'));
-    final first = names.first.characters.first;
-    final last = names.length > 1 ? names.last.characters.first : '';
-    return '$first$last'.toUpperCase();
-  }
-
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, dynamic>?>(
@@ -64,23 +58,20 @@ class _UserIdentityHeaderState extends State<UserIdentityHeader> {
           ),
           child: Row(
           children: [
-            CircleAvatar(
+            if (isLoading) CircleAvatar(
               radius: 26,
               backgroundColor: AppColors.softBlue,
               foregroundColor: AppColors.ocean,
-              child: isLoading
-                  ? const SizedBox(
+              child: const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         semanticsLabel: 'Loading profile',
                       ),
-                    )
-                  : fullName.isEmpty
-                  ? const Icon(Icons.person_outline)
-                  : Text(_initials(fullName)),
-            ),
+                    ),
+            ) else ProfileAvatar(fullName: fullName,
+              profilePhotoPath: snapshot.data?['profilePhotoPath'] is String ? snapshot.data!['profilePhotoPath'] as String : null),
             const SizedBox(width: 14),
             Expanded(
               child: Column(

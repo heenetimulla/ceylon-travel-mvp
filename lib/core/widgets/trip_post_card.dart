@@ -1,3 +1,4 @@
+import 'reputation_summary.dart';
 import 'app_components.dart';
 import '../../app/app_text_styles.dart';
 import '../../app/app_colors.dart';
@@ -42,6 +43,7 @@ class TripPostCard extends StatelessWidget {
                   Text(tripPost.creatorTypeLabel, style: AppTextStyles.caption),
                 ],
               ),
+              if (tripPost.tripReference != null) Text(tripPost.tripReference!, style: AppTextStyles.caption),
               const SizedBox(height: 20),
               AppRoute(pickup: tripPost.pickup, destination: tripPost.drop),
               const Divider(height: 32),
@@ -53,7 +55,7 @@ class TripPostCard extends StatelessWidget {
               const SizedBox(height: 4),
               InfoLine(
                 icon: Icons.person_outline,
-                text: tripPost.postedByLabel,
+                text: '${tripPost.creatorName} ? ${tripPost.postedByLabel}',
                 emphasized: true,
               ),
               const SizedBox(height: 10),
@@ -63,6 +65,7 @@ class TripPostCard extends StatelessWidget {
                 icon: Icons.directions_car_outlined,
                 text: tripPost.vehiclePreference,
               ),
+              ReputationSummary(uid: tripPost.creatorId, creator: true),
               if (hasActions) ...[
                 const SizedBox(height: 20),
                 Wrap(

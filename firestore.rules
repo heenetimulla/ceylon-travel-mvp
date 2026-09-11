@@ -14,7 +14,8 @@ service cloud.firestore {
       return [
         'uid', 'fullName', 'email', 'phoneNumber', 'city', 'accountType',
         'profilePhotoPath', 'status', 'averageRating', 'completedTripsCount',
-        'cancelledTripsCount', 'cancellationRate', 'createdAt', 'updatedAt'
+        'cancelledTripsCount', 'cancellationRate', 'createdAt', 'updatedAt',
+        'ratingsCount', 'ratingStarsTotal', 'cancellationCount'
       ];
     }
 
@@ -30,6 +31,7 @@ service cloud.firestore {
         && data.accountType in ['tourist', 'driver']
         && data.status == 'active'
         && data.profilePhotoPath == null
+        && data.ratingsCount == 0 && data.ratingStarsTotal == 0 && data.cancellationCount == 0
         && data.averageRating == 0
         && data.completedTripsCount == 0
         && data.cancelledTripsCount == 0
@@ -83,8 +85,9 @@ service cloud.firestore {
         );
 
       allow get: if isOwner(userId);
-      // Profile editing and collection queries are not enabled in Stage 6A.
-      allow list, update, delete: if false;
+      // General profile editing and listing remain disabled. Only verified Stage 10 events update metrics.
+      allow list, delete: if false;
+      allow update: if isSignedIn() && validProfileEvent(userId, resource.data, request.resource.data);
     }
 
     function exactTripPostFields(data) {
@@ -95,7 +98,9 @@ service cloud.firestore {
         'baggageCount', 'vehiclePreference', 'notes', 'status',
         'acceptedBidId', 'acceptedDriverId', 'createdAt', 'updatedAt',
         'excludedDriverIds', 'cancellationCount', 'lastCancellationBy',
-        'lastCancellationReason', 'lastCancellationAt'
+        'lastCancellationReason', 'lastCancellationAt',
+        'tripReference', 'startRequestedAt', 'startAutoStartAt', 'startedAt', 'startMethod',
+        'endRequestedAt', 'endAutoCompleteAt', 'endedAt', 'completionMethod'
       ];
       return data.keys().hasAll(fields) && data.keys().hasOnly(fields);
     }
@@ -159,7 +164,14 @@ service cloud.firestore {
     }
 
     function validInitialTripState(data) {
-      return data.excludedDriverIds == []
+      return data.tripReference is string
+        && data.tripReference.matches('^CT-[0-9]{6}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$')
+        && data.tripReference != data.id
+        && data.startRequestedAt == null && data.startAutoStartAt == null
+        && data.startedAt == null && data.startMethod == null
+        && data.endRequestedAt == null && data.endAutoCompleteAt == null
+        && data.endedAt == null && data.completionMethod == null
+        && data.excludedDriverIds == []
         && data.cancellationCount is int
         && data.cancellationCount == 0
         && data.lastCancellationBy == null
@@ -182,20 +194,11 @@ service cloud.firestore {
     }
 
     function canListTripPost(data) {
-      return hasActiveProfile()
-        && (data.creatorId == request.auth.uid
-          || (hasActiveBidReadProfile('driver')
-            && (data.status == 'open'
-              || (data.status == 'accepted'
-                && data.acceptedDriverId == request.auth.uid))));
+      return hasActiveProfile() && (data.creatorId == request.auth.uid
+        || (data.status in ['accepted', 'start_requested', 'in_progress', 'end_requested', 'completed'] && data.acceptedDriverId == request.auth.uid)
+        || (hasActiveBidReadProfile('driver') && data.status == 'open'));
     }
-
-    function canGetTripPost(data) {
-      return canListTripPost(data)
-        || (hasActiveBidReadProfile('driver')
-          && data.status == 'accepted'
-          && data.acceptedDriverId == request.auth.uid);
-    }
+    function canGetTripPost(data) { return canListTripPost(data); }
 
     function isOpenForAcceptance(data) {
       return data.status == 'open'
@@ -246,7 +249,8 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && (validTripAcceptance(tripId)
           || validCancellation(tripId, resource.data, request.resource.data)
-          || validOpenCreatorCancellation(tripId, resource.data, request.resource.data));
+          || validOpenCreatorCancellation(tripId, resource.data, request.resource.data)
+          || validLifecycleUpdate(tripId));
       allow delete: if false;
     }
 
@@ -515,6 +519,268 @@ service cloud.firestore {
             && (cancellationId == request.auth.uid
               || (resource.data.cancelledByRole == 'driver'
                 && resource.data.cancelledByUid == request.auth.uid))));
+      allow update, delete: if false;
+    }
+
+
+    function canReadTripChat(t) {
+      return isSignedIn() && hasActiveProfile()
+        && t.get('acceptedDriverId', null) is string && t.acceptedDriverId.size() > 0
+        && t.acceptedDriverId != t.creatorId
+        && t.get('acceptedBidId', null) is string && t.acceptedBidId.size() > 0
+        && request.auth.uid in [t.creatorId, t.acceptedDriverId]
+        && t.status in ['accepted', 'start_requested', 'in_progress', 'end_requested', 'completed', 'cancelled'];
+    }
+    match /trip_posts/{tripId}/messages/{messageId} {
+      allow list: if canReadAssignmentMessage(
+        get(/databases/$(database)/documents/trip_posts/$(tripId)).data, resource.data);
+      // Permit only a missing-document lookup for current participants so sends
+      // can transactionally check their new ID. Existing messages use assignment ACLs.
+      allow get: if exists(/databases/$(database)/documents/trip_posts/$(tripId)/messages/$(messageId))
+        ? canReadAssignmentMessage(get(/databases/$(database)/documents/trip_posts/$(tripId)).data, resource.data)
+        : canReadTripChat(get(/databases/$(database)/documents/trip_posts/$(tripId)).data);
+      allow create: if validTripChatMessage(tripId, messageId);
+      allow update, delete: if false;
+    }
+    function canReadAssignmentMessage(t, d) {
+      // Clients cannot forge assignment ownership: creates bind it to the current
+      // performing driver, and updates/deletes are denied. Keep parent access intact.
+      return isSignedIn() && hasActiveProfile()
+        && (request.auth.uid == t.creatorId
+          || (canGetTripPost(t) && d.assignmentDriverId == request.auth.uid));
+    }
+    function validTripChatMessage(tripId, messageId) {
+      // Validate the final parent too, including a simultaneous cancellation/completion.
+      let t = getAfter(/databases/$(database)/documents/trip_posts/$(tripId)).data;
+      let d = request.resource.data;
+      let fields = ['id', 'tripId', 'senderId', 'senderRole', 'assignmentDriverId', 'messageType', 'text', 'latitude', 'longitude', 'createdAt'];
+      return canReadTripChat(t)
+        && t.status in ['accepted', 'start_requested', 'in_progress', 'end_requested']
+        && d.keys().hasAll(fields) && d.keys().hasOnly(fields)
+        && d.id == messageId && d.tripId == tripId && d.senderId == request.auth.uid
+        && d.assignmentDriverId == t.acceptedDriverId
+        && d.senderRole == (request.auth.uid == t.creatorId ? 'creator' : 'driver')
+        && d.createdAt == request.time
+        && ((d.messageType == 'text' && d.text is string && d.text.size() > 0 && d.text.size() <= 1000
+              && d.text.matches('^\\S([\\s\\S]*\\S)?$') && d.latitude == null && d.longitude == null)
+          || (d.messageType == 'location' && d.text == null
+              && d.latitude is number && d.latitude >= -90 && d.latitude <= 90
+              && d.longitude is number && d.longitude >= -180 && d.longitude <= 180));
+    }
+
+    // Stage 10: client manual actions only; timeout writes require trusted Admin SDK.
+    // All client time gates use Firestore request.time, not device time.
+    function participant(t) {
+      return hasActiveProfile() && t.acceptedDriverId is string
+        && t.acceptedDriverId != t.creatorId && t.acceptedBidId is string
+        && t.acceptedBidId.size() > 0
+        && request.auth.uid in [t.creatorId, t.acceptedDriverId];
+    }
+    function completionEvent(tripId) {
+      let path = /databases/$(database)/documents/trip_posts/$(tripId);
+      let b = get(path).data;
+      let a = getAfter(path).data;
+      return participant(b) && b.status == 'end_requested' && a.status == 'completed'
+        && a.diff(b).affectedKeys().hasOnly(['status', 'endedAt', 'completionMethod', 'updatedAt'])
+        && a.endedAt == request.time && a.updatedAt == request.time
+        && a.completionMethod == 'creator_confirmed'
+        && request.auth.uid == b.creatorId && request.time < b.endAutoCompleteAt;
+    }
+    function validRequestTransition(tripId, b, a, start) {
+      let phase = start ? 'start' : 'end';
+      let anchor = get(/databases/$(database)/documents/trip_posts/$(tripId)/lifecycle_requests/$(phase)).data;
+      return request.auth.uid == b.acceptedDriverId
+        && anchor.requestedBy == request.auth.uid
+        && anchor.createdAt <= request.time
+        && request.time - anchor.createdAt <= duration.value(60, 's')
+        && (start
+          ? b.status == 'accepted' && a.status == 'start_requested'
+            && a.diff(b).affectedKeys().hasOnly(['status', 'startRequestedAt', 'startAutoStartAt', 'startedAt', 'startMethod', 'updatedAt'])
+            && a.startRequestedAt == anchor.createdAt
+            && a.startAutoStartAt == anchor.createdAt + duration.value(3, 'm')
+            && a.startedAt == null && a.startMethod == null
+          : b.status == 'in_progress' && a.status == 'end_requested'
+            && a.diff(b).affectedKeys().hasOnly(['status', 'endRequestedAt', 'endAutoCompleteAt', 'endedAt', 'completionMethod', 'updatedAt'])
+            && a.endRequestedAt == anchor.createdAt
+            && a.endAutoCompleteAt == anchor.createdAt + duration.value(30, 'm')
+            && a.endedAt == null && a.completionMethod == null);
+    }
+    function completedProfileWritten(uid, tripId) {
+      let path = /databases/$(database)/documents/users/$(uid);
+      return getAfter(path).data.completedTripsCount == get(path).data.completedTripsCount + 1
+        && getAfter(path).data.lastCompletedTripId == tripId;
+    }
+    function validLifecycleUpdate(tripId) {
+      let b = resource.data;
+      let a = request.resource.data;
+      return participant(b) && a.updatedAt == request.time
+        && ((b.status == 'accepted' && validRequestTransition(tripId, b, a, true))
+          || (b.status == 'in_progress' && validRequestTransition(tripId, b, a, false))
+          || (b.status == 'start_requested' && a.status == 'in_progress'
+            && a.diff(b).affectedKeys().hasOnly(['status', 'startedAt', 'startMethod', 'updatedAt'])
+            && a.startedAt == request.time
+            && a.startMethod == 'creator_confirmed'
+            && request.auth.uid == b.creatorId && request.time < b.startAutoStartAt)
+          || (completionEvent(tripId)
+            && completedProfileWritten(b.creatorId, tripId)
+            && completedProfileWritten(b.acceptedDriverId, tripId)));
+    }
+    match /trip_posts/{tripId}/lifecycle_requests/{phase} {
+      allow read: if isSignedIn() && participant(get(/databases/$(database)/documents/trip_posts/$(tripId)).data);
+      allow create, update: if isSignedIn()
+        && participant(get(/databases/$(database)/documents/trip_posts/$(tripId)).data)
+        && request.auth.uid == get(/databases/$(database)/documents/trip_posts/$(tripId)).data.acceptedDriverId
+        && ((phase == 'start' && get(/databases/$(database)/documents/trip_posts/$(tripId)).data.status == 'accepted')
+          || (phase == 'end' && get(/databases/$(database)/documents/trip_posts/$(tripId)).data.status == 'in_progress'))
+        && request.resource.data.keys().hasAll(['requestedBy', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['requestedBy', 'createdAt'])
+        && request.resource.data.requestedBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
+      allow delete: if false;
+    }
+    function validProfileEvent(uid, b, a) {
+      return a.diff(b).affectedKeys().hasAny(['completedTripsCount'])
+        ? validCompletionProfile(uid, b, a)
+        : a.diff(b).affectedKeys().hasAny(['ratingsCount']) && validRatingProfile(uid, b, a);
+    }
+    function validCompletionProfile(uid, b, a) {
+      let tripId = a.get('lastCompletedTripId', '');
+      let trip = get(/databases/$(database)/documents/trip_posts/$(tripId)).data;
+      let rep = getAfter(/databases/$(database)/documents/user_reputation/$(uid)).data;
+      return completionEvent(tripId) && uid in [trip.creatorId, trip.acceptedDriverId]
+        && a.diff(b).affectedKeys().hasOnly(['completedTripsCount', 'lastCompletedTripId'])
+        && a.completedTripsCount is int && a.completedTripsCount == b.completedTripsCount + 1
+        && rep.completedTripsCount == a.completedTripsCount
+        && rep.ratingsCount == b.get('ratingsCount', 0)
+        && rep.ratingStarsTotal == b.get('ratingStarsTotal', 0)
+        && rep.averageRating == b.averageRating;
+    }
+    function validRatingRecord(tripId, direction, d) {
+      let t = get(/databases/$(database)/documents/trip_posts/$(tripId)).data;
+      let creator = request.auth.uid == t.creatorId;
+      return participant(t) && t.status == 'completed'
+        && direction == (creator ? 'creator_to_driver' : 'driver_to_creator')
+        && d.keys().hasAll(['id', 'tripId', 'tripReference', 'ratedByUid', 'ratedUserUid', 'ratedByRole', 'stars', 'comment', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['id', 'tripId', 'tripReference', 'ratedByUid', 'ratedUserUid', 'ratedByRole', 'stars', 'comment', 'createdAt', 'updatedAt'])
+        && d.id == direction && d.tripId == tripId && d.tripReference == t.get('tripReference', null)
+        && d.ratedByUid == request.auth.uid
+        && d.ratedUserUid == (creator ? t.acceptedDriverId : t.creatorId)
+        && d.ratedByUid != d.ratedUserUid && d.ratedByRole == (creator ? 'creator' : 'driver')
+        && d.stars is int && d.stars >= 1 && d.stars <= 5
+        && d.comment is string && d.comment.size() > 0 && d.comment.size() <= 1000
+        && d.comment.matches('^\\S([\\s\\S]*\\S)?$')
+        && d.createdAt == request.time && d.updatedAt == request.time;
+    }
+    function validRatingProfile(uid, b, a) {
+      let tripId = a.get('lastRatingTripId', '');
+      let direction = a.get('lastRatingDirection', '');
+      let path = /databases/$(database)/documents/trip_posts/$(tripId)/ratings/$(direction);
+      let rating = getAfter(path).data;
+      let rep = getAfter(/databases/$(database)/documents/user_reputation/$(uid)).data;
+      return !exists(path) && validRatingRecord(tripId, direction, rating)
+        && rating.ratedUserUid == uid
+        && a.diff(b).affectedKeys().hasOnly(['averageRating', 'ratingsCount', 'ratingStarsTotal', 'lastRatingTripId', 'lastRatingDirection'])
+        && a.ratingsCount is int && a.ratingsCount == b.get('ratingsCount', 0) + 1
+        && a.ratingStarsTotal is int && a.ratingStarsTotal == b.get('ratingStarsTotal', 0) + rating.stars
+        && a.averageRating == a.ratingStarsTotal * 1.0 / a.ratingsCount
+        && rep.completedTripsCount == b.completedTripsCount
+        && rep.averageRating == a.averageRating && rep.ratingsCount == a.ratingsCount
+        && rep.ratingStarsTotal == a.ratingStarsTotal;
+    }
+    match /trip_posts/{tripId}/ratings/{direction} {
+      allow read: if isSignedIn() && participant(get(/databases/$(database)/documents/trip_posts/$(tripId)).data);
+      allow create: if isSignedIn() && validRatingRecord(tripId, direction, request.resource.data)
+        && validRatingProfile(request.resource.data.ratedUserUid,
+          get(/databases/$(database)/documents/users/$(request.resource.data.ratedUserUid)).data,
+          getAfter(/databases/$(database)/documents/users/$(request.resource.data.ratedUserUid)).data);
+      allow update, delete: if false;
+    }
+    // Trusted safe projections only. Private users and original rating access stay unchanged.
+    match /user_public_profiles/{uid} {
+      allow read: if isSignedIn() && hasActiveProfile();
+      allow write: if false;
+      match /reviews/{reviewId} {
+        allow read: if isSignedIn() && hasActiveProfile()
+          && exists(/databases/$(database)/documents/user_public_profiles/$(uid));
+        allow write: if false;
+      }
+    }
+    match /user_reputation/{uid} {
+      // Public metrics only. Never mirror names, email, phone or verification documents.
+      allow read: if isSignedIn() && hasActiveProfile();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasAll(['completedTripsCount', 'ratingsCount', 'ratingStarsTotal', 'averageRating', 'cancellationCount', 'cancellationRate'])
+        && request.resource.data.keys().hasOnly(['completedTripsCount', 'ratingsCount', 'ratingStarsTotal', 'averageRating', 'cancellationCount', 'cancellationRate'])
+        && ((!exists(/databases/$(database)/documents/user_reputation/$(uid))
+            && request.resource.data.cancellationCount == null && request.resource.data.cancellationRate == null)
+          || (exists(/databases/$(database)/documents/user_reputation/$(uid))
+            && request.resource.data.cancellationCount == resource.data.cancellationCount
+            && request.resource.data.cancellationRate == resource.data.cancellationRate))
+        && validProfileEvent(uid, get(/databases/$(database)/documents/users/$(uid)).data, getAfter(/databases/$(database)/documents/users/$(uid)).data);
+      allow delete: if false;
+    }
+
+    function supportAdmin() {
+      return isSignedIn() && request.auth.token.get('supportAdmin', false) == true;
+    }
+    function supportOwner(id) {
+      return isSignedIn() && get(/databases/$(database)/documents/support_requests/$(id)).data.userId == request.auth.uid;
+    }
+    function validSupportTrip(d) {
+      let t = get(/databases/$(database)/documents/trip_posts/$(d.tripId)).data;
+      return t.status == 'completed' && participant(t) && d.category == 'complaint'
+        && d.creatorId == t.creatorId && d.acceptedDriverId == t.acceptedDriverId
+        && d.tripReference == t.get('tripReference', null)
+        && d.subCategory in (request.auth.uid == t.creatorId
+          ? ['driver_no_show', 'driver_started_without_passenger', 'wrong_start_time', 'wrong_end_time', 'driver_ended_incorrectly', 'driver_behaviour', 'vehicle_issue', 'safety_concern', 'payment_price_issue', 'other']
+          : ['passenger_no_show', 'creator_unreachable', 'incorrect_hire_details', 'wrong_pickup_drop', 'payment_incorrect', 'payment_incomplete', 'passenger_creator_behaviour', 'trip_changed_unexpectedly', 'other']);
+    }
+    function validSupportCreate(id, d) {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let fields = ['id', 'supportReference', 'userId', 'userRole', 'userName', 'contactNumber', 'category', 'subCategory',
+        'tripId', 'tripReference', 'creatorId', 'acceptedDriverId', 'subject', 'message', 'status', 'createdAt', 'updatedAt', 'lastMessageAt', 'lastMessageId'];
+      return hasActiveProfile() && d.keys().hasAll(fields) && d.keys().hasOnly(fields)
+        && d.id == id && d.userId == request.auth.uid && d.userRole == profile.accountType && d.userName == profile.fullName
+        && d.supportReference is string && d.supportReference.matches('^SUP-[0-9]{6}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$')
+        && d.contactNumber is string && d.contactNumber.size() <= 40
+        && d.contactNumber.matches('^\\+?[0-9(][0-9 ()-]*[0-9)]$')
+        && d.contactNumber.replace('[^0-9]', '').size() >= 7
+        && d.contactNumber.replace('[^0-9]', '').size() <= 15
+        && d.category in ['complaint', 'feedback', 'suggestion', 'question', 'registration_help', 'app_usage_help', 'other']
+        && d.subject is string && d.subject.size() > 0 && d.subject.size() <= 160 && d.subject.matches('^\\S([\\s\\S]*\\S)?$')
+        && d.message is string && d.message.size() > 0 && d.message.size() <= 4000 && d.message.matches('^\\S([\\s\\S]*\\S)?$')
+        && d.status == 'open' && d.createdAt == request.time && d.updatedAt == request.time && d.lastMessageAt == request.time && d.lastMessageId == null
+        && ((d.tripId == null && d.creatorId == null && d.acceptedDriverId == null && d.subCategory == null
+            && (d.tripReference == null || (d.category == 'complaint' && d.tripReference is string && d.tripReference.size() > 0 && d.tripReference.size() <= 40)))
+          || (d.tripId is string && validSupportTrip(d)));
+    }
+    function validSupportReply(id, messageId, d) {
+      let parentPath = /databases/$(database)/documents/support_requests/$(id);
+      let b = get(parentPath).data;
+      let a = getAfter(parentPath).data;
+      return b.status != 'closed'
+        && d.keys().hasAll(['id', 'senderId', 'senderRole', 'message', 'createdAt'])
+        && d.keys().hasOnly(['id', 'senderId', 'senderRole', 'message', 'createdAt'])
+        && d.id == messageId && d.senderId == request.auth.uid
+        && ((b.userId == request.auth.uid && d.senderRole == 'user') || (supportAdmin() && d.senderRole == 'admin'))
+        && d.message is string && d.message.size() > 0 && d.message.size() <= 4000 && d.message.matches('^\\S([\\s\\S]*\\S)?$')
+        && d.createdAt == request.time && a.updatedAt == request.time && a.lastMessageAt == request.time && a.lastMessageId == messageId
+        && a.diff(b).affectedKeys().hasOnly(['updatedAt', 'lastMessageAt', 'lastMessageId']);
+    }
+    match /support_requests/{id} {
+      allow create: if isSignedIn() && validSupportCreate(id, request.resource.data);
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || supportAdmin());
+      allow update: if isSignedIn()
+        && ((request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt', 'lastMessageAt', 'lastMessageId'])
+            && !exists(/databases/$(database)/documents/support_requests/$(id)/messages/$(request.resource.data.lastMessageId))
+            && validSupportReply(id, request.resource.data.lastMessageId, getAfter(/databases/$(database)/documents/support_requests/$(id)/messages/$(request.resource.data.lastMessageId)).data))
+          || (supportAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+            && request.resource.data.status in ['open', 'in_review', 'resolved', 'closed'] && request.resource.data.updatedAt == request.time));
+      allow delete: if false;
+    }
+    match /support_requests/{id}/messages/{messageId} {
+      allow read: if supportOwner(id) || supportAdmin();
+      allow create: if isSignedIn() && validSupportReply(id, messageId, request.resource.data);
       allow update, delete: if false;
     }
 

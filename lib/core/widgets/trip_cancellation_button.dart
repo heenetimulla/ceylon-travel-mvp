@@ -161,7 +161,9 @@ class _TripCancellationButtonState extends State<TripCancellationButton> {
   }
 
   @override
-  Widget build(BuildContext context) => OutlinedButton.icon(
+  Widget build(BuildContext context) => !widget.trip.canCancel
+      ? const SizedBox.shrink()
+      : OutlinedButton.icon(
     style: OutlinedButton.styleFrom(
       foregroundColor: AppColors.error,
       side: const BorderSide(color: AppColors.error),

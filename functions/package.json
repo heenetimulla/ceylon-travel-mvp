@@ -1,0 +1,18 @@
+{
+  "name": "ceylon-travel-lifecycle",
+  "private": true,
+  "main": "lib/src/index.js",
+  "engines": { "node": "22" },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test lib/test/*.test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "13.4.0",
+    "firebase-functions": "6.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "typescript": "5.8.3"
+  }
+}

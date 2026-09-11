@@ -43,7 +43,7 @@ class Bid {
   String effectiveStatusFor(TripPost trip) {
     if (status == 'cancelled' || status == 'trip_cancelled') return status;
     if (trip.status == 'cancelled') return 'trip_cancelled';
-    if (trip.status == 'accepted') {
+    if (TripPost.assignedStatuses.contains(trip.status)) {
       return trip.acceptedBidId == id ? 'accepted' : 'closed';
     }
     return status;

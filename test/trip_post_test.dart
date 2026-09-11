@@ -141,6 +141,8 @@ void main() {
       'lastCancellationBy',
       'lastCancellationReason',
       'lastCancellationAt',
+      'tripReference', 'startRequestedAt', 'startAutoStartAt', 'startedAt', 'startMethod',
+      'endRequestedAt', 'endAutoCompleteAt', 'endedAt', 'completionMethod',
       'createdAt',
       'updatedAt',
     });

@@ -1,3 +1,4 @@
+import 'reputation_summary.dart';
 import 'app_components.dart';
 import '../../app/app_text_styles.dart';
 import '../../app/app_colors.dart';
@@ -49,7 +50,7 @@ class BidCard extends StatelessWidget {
                       Text(bid.driverName, style: AppTextStyles.cardTitle),
                       const SizedBox(height: 4),
                       Text(
-                        'Rating ${bid.driverRating.toStringAsFixed(1)}',
+                        'Rating at offer: ${bid.driverRating.toStringAsFixed(1)}',
                         style: AppTextStyles.secondary,
                       ),
                     ],
@@ -65,12 +66,7 @@ class BidCard extends StatelessWidget {
             const Divider(),
             InfoLine(
               icon: Icons.check_circle_outline,
-              text: '${bid.completedTrips} completed trips',
-            ),
-            InfoLine(
-              icon: Icons.cancel_outlined,
-              text:
-                  '${bid.cancellationRateLabel} cancellation rate from last 10 trips',
+              text: '${bid.completedTrips} completed trips at offer',
             ),
             InfoLine(
               icon: Icons.directions_car_outlined,
@@ -106,6 +102,7 @@ class BidCard extends StatelessWidget {
               icon: Icons.schedule_outlined,
               text: 'Estimated trip duration: ${bid.estimatedTravelTime}',
             ),
+            ReputationSummary(uid: bid.driverId),
             InfoLine(icon: Icons.message_outlined, text: bid.message),
             const SizedBox(height: 14),
             SizedBox(

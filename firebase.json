@@ -1,1 +1,45 @@
-{"firestore":{"rules":"firestore.rules"},"flutter":{"platforms":{"android":{"default":{"projectId":"ceylon-travel-mvp","appId":"1:7655683762:android:fee391366839d10185fbab","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"ceylon-travel-mvp","configurations":{"android":"1:7655683762:android:fee391366839d10185fbab","ios":"1:7655683762:ios:4d8fd3e35550ac2985fbab","macos":"1:7655683762:ios:4d8fd3e35550ac2985fbab","web":"1:7655683762:web:e5cb5bd95f29569685fbab","windows":"1:7655683762:web:361ba229778ca07585fbab"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "ceylon-travel-mvp",
+          "appId": "1:7655683762:android:fee391366839d10185fbab",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "ceylon-travel-mvp",
+          "configurations": {
+            "android": "1:7655683762:android:fee391366839d10185fbab",
+            "ios": "1:7655683762:ios:4d8fd3e35550ac2985fbab",
+            "macos": "1:7655683762:ios:4d8fd3e35550ac2985fbab",
+            "web": "1:7655683762:web:e5cb5bd95f29569685fbab",
+            "windows": "1:7655683762:web:361ba229778ca07585fbab"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "trip-lifecycle",
+      "runtime": "nodejs22",
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run build"
+      ],
+      "ignore": [
+        "node_modules",
+        ".git",
+        "test",
+        "*.log"
+      ]
+    }
+  ]
+}

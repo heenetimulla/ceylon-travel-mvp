@@ -1,151 +1,54 @@
-import '../../core/widgets/app_components.dart';
-import '../../app/app_text_styles.dart';
-import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
-
-import '../../core/models/completed_trip.dart';
-import '../../core/widgets/info_line.dart';
+import '../../core/models/trip_post.dart';
+import '../../core/services/rating_service.dart';
+import '../../core/widgets/app_components.dart';
 
 class RatingScreen extends StatefulWidget {
-  const RatingScreen({super.key, required this.completedTrip});
-
-  final CompletedTrip completedTrip;
-
+  const RatingScreen({super.key, required this.trip, required this.byCreator, this.onSubmit});
+  final TripPost trip;
+  final bool byCreator;
+  final Future<void> Function(int stars, String comment)? onSubmit;
   @override
   State<RatingScreen> createState() => _RatingScreenState();
 }
-
 class _RatingScreenState extends State<RatingScreen> {
-  final TextEditingController commentController = TextEditingController();
-  int selectedRating = 5;
-
+  final _form = GlobalKey<FormState>();
+  final _comment = TextEditingController();
+  int _stars = 5;
+  bool _saving = false;
+  String? _error;
   @override
-  void dispose() {
-    commentController.dispose();
-    super.dispose();
+  void dispose() { _comment.dispose(); super.dispose(); }
+  Future<void> _save() async {
+    if (_saving || !_form.currentState!.validate()) return;
+    setState(() { _saving = true; _error = null; });
+    try {
+      if (widget.onSubmit != null) { await widget.onSubmit!(_stars, _comment.text.trim()); }
+      else { await RatingService().submit(tripId: widget.trip.id, stars: _stars, comment: _comment.text); }
+      if (mounted) Navigator.pop(context);
+    } catch (_) { if (mounted) setState(() => _error = 'Could not save your rating. You may already have rated this trip. Please try again.'); }
+    finally { if (mounted) setState(() => _saving = false); }
   }
-
-  void _submitRating() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Demo rating saved. Firebase saving comes in Week 3.'),
-      ),
-    );
-    Navigator.pop(context);
-  }
-
   @override
-  Widget build(BuildContext context) {
-    final CompletedTrip trip = widget.completedTrip;
-
-    return Scaffold(
-      appBar: AppPageAppBar(title: const Text('Rate Trip')),
-      body: SafeArea(
-        child: ListView(
-          padding: appPagePadding(context),
-          children: [
-            Card(
-              color: AppColors.surface,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Trip summary', style: AppTextStyles.section),
-                    const SizedBox(height: 10),
-                    Text(trip.route, style: AppTextStyles.cardTitle),
-                    const SizedBox(height: 8),
-                    InfoLine(
-                      icon: Icons.local_taxi_outlined,
-                      text: 'Driver: ${trip.driverName}',
-                    ),
-                    InfoLine(
-                      icon: Icons.person_outline,
-                      text: 'Customer: ${trip.touristName}',
-                    ),
-                    InfoLine(
-                      icon: Icons.calendar_month_outlined,
-                      text: trip.completedDate,
-                    ),
-                    InfoLine(
-                      icon: Icons.payments_outlined,
-                      text: trip.acceptedBidPrice,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Card(
-              color: AppColors.softBlue,
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Week 2 MVP', style: AppTextStyles.cardTitle),
-                    SizedBox(height: 10),
-                    InfoLine(
-                      icon: Icons.people_outline,
-                      text:
-                          'Both tourist and driver can rate each other after trip completion.',
-                    ),
-                    InfoLine(
-                      icon: Icons.update_outlined,
-                      text:
-                          'Average rating and completed trip count will be updated in Week 3 with Firebase.',
-                    ),
-                    InfoLine(
-                      icon: Icons.storage_outlined,
-                      text: 'Rating is UI only for now.',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text('Star rating', style: AppTextStyles.cardTitle),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (int value = 1; value <= 5; value++)
-                  IconButton(
-                    tooltip: '$value star rating',
-                    onPressed: () {
-                      setState(() {
-                        selectedRating = value;
-                      });
-                    },
-                    icon: Icon(
-                      value <= selectedRating ? Icons.star : Icons.star_border,
-                      color: AppColors.ocean,
-                      size: 34,
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: commentController,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Comment',
-                alignLabelWithHint: true,
-                prefixIcon: Icon(Icons.rate_review_outlined),
-              ),
-            ),
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _submitRating,
-                child: Text('Submit Rating'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppPageAppBar(title: Text(widget.byCreator ? 'Rate your driver' : 'Rate the hire creator')),
+    body: ListView(padding: appPagePadding(context), children: [
+      AppInfoCard(children: [
+        Text(widget.trip.referenceLabel),
+        AppSectionHeader(widget.byCreator ? 'Rate your driver' : 'Rate the person who gave/created this hire'),
+        Form(key: _form, child: Column(children: [
+          DropdownButtonFormField<int>(initialValue: _stars, decoration: const InputDecoration(labelText: 'Stars'),
+            items: [for (var i = 1; i <= 5; i++) DropdownMenuItem(value: i, child: Text('$i ${i == 1 ? 'star' : 'stars'}'))],
+            onChanged: _saving ? null : (v) => setState(() => _stars = v!),
+          ),
+          const SizedBox(height: 16),
+          TextFormField(controller: _comment, enabled: !_saving, maxLength: 1000, maxLines: 5,
+            decoration: const InputDecoration(labelText: 'Written review'),
+            validator: (v) => (v ?? '').trim().isEmpty ? 'Please write a review.' : null),
+          if (_error != null) Text(_error!),
+          FilledButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Saving...' : 'Submit Rating')),
+        ])),
+      ]),
+    ]),
+  );
 }

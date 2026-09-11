@@ -1,9 +1,14 @@
+import '../auth/account_screen.dart';
 import '../../core/widgets/app_components.dart';
 import '../../app/app_text_styles.dart';
 import '../../app/app_colors.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/trip_post.dart';
+import '../../core/models/active_trip_order.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import '../trip/lifecycle_trip_screen.dart';
 import '../../core/services/trip_post_service.dart';
 import '../../core/widgets/trip_post_card.dart';
 import '../../core/widgets/user_identity_header.dart';
@@ -16,7 +21,9 @@ import 'accepted_driver_trips_screen.dart';
 import 'submit_bid_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
-  const DriverHomeScreen({super.key});
+  const DriverHomeScreen({super.key, this.postsStream, this.loadProfile});
+  final Stream<List<TripPost>>? postsStream;
+  final Future<Map<String, dynamic>?> Function()? loadProfile;
 
   @override
   State<DriverHomeScreen> createState() => _DriverHomeScreenState();
@@ -28,19 +35,22 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _posts = TripPostService().watchDriverPosts();
+    _posts = widget.postsStream ?? TripPostService().watchDriverDashboardPosts();
   }
 
   void _retryPosts() {
-    setState(() => _posts = TripPostService().watchDriverPosts());
+    setState(() => _posts = widget.postsStream ?? TripPostService().watchDriverDashboardPosts());
   }
 
   void _openTripDetails(BuildContext context, TripPost tripPost) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            TripDetailsScreen(tripPost: tripPost, showSubmitBid: true),
+        builder: (_) => TripPost.assignedStatuses.contains(tripPost.status)
+            ? LifecycleTripScreen(tripId: tripPost.id)
+            : TripDetailsScreen(tripPost: tripPost,
+                showViewBids: tripPost.creatorId == FirebaseAuth.instance.currentUser?.uid,
+                showSubmitBid: tripPost.creatorId != FirebaseAuth.instance.currentUser?.uid),
       ),
     );
   }
@@ -71,12 +81,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     return Scaffold(
       appBar: AppPageAppBar(
         title: const Text('Driver Dashboard'),
-        actions: const [LogoutButton()],
+        actions: [IconButton(tooltip: 'Account & Support', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen())), icon: const Icon(Icons.account_circle_outlined)), const LogoutButton()],
       ),
       body: ListView(
         padding: appPagePadding(context),
         children: [
-          const UserIdentityHeader(),
+          UserIdentityHeader(loadProfile: widget.loadProfile),
           const SizedBox(height: 20),
           const Text('Your driver workspace', style: AppTextStyles.section),
           const SizedBox(height: 8),
@@ -140,9 +150,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
           const SizedBox(height: 18),
           const AppSectionHeader(
-            'Available Trips',
+            'Available Trips & Active Hires',
             spacious: true,
-            subtitle: 'Explore requests and send a private offer.',
+            subtitle: 'Open requests first, followed by your active hires and assigned trips.',
           ),
           StreamBuilder<List<TripPost>>(
             stream: _posts,
@@ -161,12 +171,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   ],
                 );
               }
-              final posts = snapshot.data ?? const <TripPost>[];
+              final posts = orderedActiveTrips(snapshot.data ?? const <TripPost>[]);
               if (posts.isEmpty) {
                 return const AppEmptyState(
                   title: 'No trips available',
                   message:
-                      'No open trip posts are available right now. Check back for new requests.',
+                      'No open or active trips are available right now. Check back for new requests.',
                 );
               }
               return Column(
@@ -175,7 +185,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     TripPostCard(
                       tripPost: tripPost,
                       onViewDetails: () => _openTripDetails(context, tripPost),
-                      onSubmitBid: () => _openSubmitBid(context, tripPost),
+                      onSubmitBid: tripPost.status == 'open' && Firebase.apps.isNotEmpty &&
+                          tripPost.creatorId != FirebaseAuth.instance.currentUser?.uid
+                          ? () => _openSubmitBid(context, tripPost) : null,
                     ),
                 ],
               );

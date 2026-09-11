@@ -38,6 +38,8 @@ dependencies:
   firebase_auth: ^6.6.1
   cloud_firestore: ^6.9.0
   shared_preferences: ^2.5.3
+  geolocator: ^14.0.3
+  url_launcher: ^6.3.2
 
 dependency_overrides:
   # Temporary: firebase_core_web 3.11.0 does not compile with Dart 3.11.x.

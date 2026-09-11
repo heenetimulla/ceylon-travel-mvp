@@ -1,3 +1,4 @@
+import 'lifecycle_trip_screen.dart';
 import '../../core/widgets/app_components.dart';
 import '../../app/app_text_styles.dart';
 import '../../app/app_colors.dart';
@@ -42,6 +43,9 @@ class TripDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (showViewBids && TripPost.assignedStatuses.contains(tripPost.status)) {
+      return LifecycleTripScreen(tripId: tripPost.id);
+    }
     final bool hasActions = showViewBids || showSubmitBid;
 
     return Scaffold(
@@ -52,6 +56,7 @@ class TripDetailsScreen extends StatelessWidget {
           children: [
             AppInfoCard(
               children: [
+                SelectableText('Trip Reference: ${tripPost.referenceLabel}'),
                 AppStatusChip(tripPost.status),
                 const AppSectionHeader('Route'),
                 AppRoute(pickup: tripPost.pickup, destination: tripPost.drop),

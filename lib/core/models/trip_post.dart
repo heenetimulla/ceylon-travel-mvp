@@ -26,6 +26,15 @@ class TripPost {
     this.lastCancellationBy,
     this.lastCancellationReason,
     this.lastCancellationAt,
+    this.tripReference,
+    this.startRequestedAt,
+    this.startAutoStartAt,
+    this.startedAt,
+    this.startMethod,
+    this.endRequestedAt,
+    this.endAutoCompleteAt,
+    this.endedAt,
+    this.completionMethod,
     this.createdAt,
     this.updatedAt,
   });
@@ -54,8 +63,21 @@ class TripPost {
   final String? lastCancellationBy;
   final String? lastCancellationReason;
   final DateTime? lastCancellationAt;
+  final String? tripReference;
+  final DateTime? startRequestedAt;
+  final DateTime? startAutoStartAt;
+  final DateTime? startedAt;
+  final String? startMethod;
+  final DateTime? endRequestedAt;
+  final DateTime? endAutoCompleteAt;
+  final DateTime? endedAt;
+  final String? completionMethod;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  static const assignedStatuses = ['accepted', 'start_requested', 'in_progress', 'end_requested', 'completed'];
+  String get referenceLabel => tripReference ?? 'Legacy trip (reference unavailable)';
+  bool get canCancel => status == 'open' || status == 'accepted';
 
   String get pickup => pickupLocationText;
   String get drop => dropLocationText;
@@ -143,6 +165,15 @@ class TripPost {
       lastCancellationBy: data['lastCancellationBy'] as String?,
       lastCancellationReason: data['lastCancellationReason'] as String?,
       lastCancellationAt: _readDate(data['lastCancellationAt']),
+      tripReference: data['tripReference'] as String?,
+      startRequestedAt: _readDate(data['startRequestedAt']),
+      startAutoStartAt: _readDate(data['startAutoStartAt']),
+      startedAt: _readDate(data['startedAt']),
+      startMethod: data['startMethod'] as String?,
+      endRequestedAt: _readDate(data['endRequestedAt']),
+      endAutoCompleteAt: _readDate(data['endAutoCompleteAt']),
+      endedAt: _readDate(data['endedAt']),
+      completionMethod: data['completionMethod'] as String?,
       createdAt: _readDate(data['createdAt']),
       updatedAt: _readDate(data['updatedAt']),
     );
@@ -150,6 +181,16 @@ class TripPost {
 
   Map<String, dynamic> toFirestore() => {
     'id': id,
+    'tripReference': tripReference,
+    'startRequestedAt': startRequestedAt == null ? null : Timestamp.fromDate(startRequestedAt!),
+    'startAutoStartAt': startAutoStartAt == null ? null : Timestamp.fromDate(startAutoStartAt!),
+    'startedAt': startedAt == null ? null : Timestamp.fromDate(startedAt!),
+    'startMethod': startMethod,
+    'endRequestedAt': endRequestedAt == null ? null : Timestamp.fromDate(endRequestedAt!),
+    'endAutoCompleteAt': endAutoCompleteAt == null ? null : Timestamp.fromDate(endAutoCompleteAt!),
+    'endedAt': endedAt == null ? null : Timestamp.fromDate(endedAt!),
+    'completionMethod': completionMethod,
+
     'creatorId': creatorId,
     'creatorType': creatorType,
     'creatorName': creatorName,

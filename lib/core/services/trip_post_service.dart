@@ -1,3 +1,6 @@
+import '../models/readable_reference.dart';
+import 'dart:async';
+import '../models/active_trip_order.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -18,6 +21,32 @@ class TripPostService {
       _watchPosts(null, creatorOnly: true);
 
   Stream<List<TripPost>> watchDriverPosts() => _watchPosts('driver');
+
+  /// Merge only already-authorized feeds; never query unrelated assigned trips.
+  Stream<List<TripPost>> watchDriverDashboardPosts() {
+    final feeds = [watchDriverPosts(), watchCreatorPosts(), watchAcceptedDriverTrips()];
+    final values = <int, List<TripPost>>{};
+    final subscriptions = <StreamSubscription<List<TripPost>>>[];
+    late final StreamController<List<TripPost>> controller;
+    controller = StreamController<List<TripPost>>(onListen: () {
+      for (var i = 0; i < feeds.length; i++) {
+        final index = i;
+        subscriptions.add(feeds[i].listen((posts) {
+          values[index] = posts;
+          if (values.length == feeds.length) {
+            final unique = {for (final list in values.values) for (final trip in list) trip.id: trip};
+            controller.add(orderedActiveTrips(unique.values));
+          }
+        }, onError: (Object error, StackTrace stack) {
+          values.remove(index);
+          controller.addError(error, stack);
+        }));
+      }
+    }, onCancel: () async {
+      for (final subscription in subscriptions) { await subscription.cancel(); }
+    });
+    return controller.stream;
+  }
 
   Stream<List<TripPost>> watchAcceptedDriverTrips() async* {
     try {
@@ -51,7 +80,7 @@ class TripPostService {
       // trips and filter by driver on the client.
       final query = _firestore
           .collection('trip_posts')
-          .where('status', isEqualTo: 'accepted')
+          .where('status', whereIn: ['accepted', 'start_requested', 'in_progress', 'end_requested'])
           .where('acceptedDriverId', isEqualTo: user.uid);
       await for (final snapshot in query.snapshots()) {
         if (_auth.currentUser?.uid != user.uid) {
@@ -59,12 +88,7 @@ class TripPostService {
             'Your session changed. Please sign in again.',
           );
         }
-        final trips =
-            snapshot.docs.map((doc) => TripPost.fromFirestore(doc)).toList()
-              ..sort((a, b) {
-                final order = a.scheduledAt.compareTo(b.scheduledAt);
-                return order == 0 ? a.id.compareTo(b.id) : order;
-              });
+        final trips = orderedActiveTrips(snapshot.docs.map((doc) => TripPost.fromFirestore(doc)));
         yield trips;
       }
     } on TripPostServiceException {
@@ -150,15 +174,14 @@ class TripPostService {
                 .where(
                   (post) => creatorOnly
                       ? post.creatorId == user.uid &&
-                            ['open', 'accepted'].contains(post.status)
+                            ['open', 'accepted', 'start_requested', 'in_progress', 'end_requested'].contains(post.status)
                       : post.status == 'open' &&
                             !post.scheduledAt.isBefore(now) &&
                             post.creatorId != user.uid &&
                             !post.excludedDriverIds.contains(user.uid),
                 )
-                .toList()
-              ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
-        yield posts;
+                .toList();
+        yield orderedActiveTrips(posts);
       }
     } on TripPostServiceException {
       rethrow;
@@ -262,6 +285,7 @@ class TripPostService {
       final isTourist = creatorType == 'tourist';
       final post = TripPost(
         id: ref.id,
+        tripReference: generateReference('CT'),
         creatorId: user.uid,
         creatorType: creatorType as String,
         creatorName: fullName.trim(),
