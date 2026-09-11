@@ -5,6 +5,7 @@ import '../../core/models/user_reputation.dart';
 import '../../core/widgets/app_components.dart';
 import '../../core/widgets/reputation_summary.dart';
 import '../support/support_screens.dart';
+import '../admin/admin_dashboard_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -28,6 +29,7 @@ class _AccountScreenState extends State<AccountScreen> {
       FilledButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportFormScreen())), child: const Text('Contact Us / Support')),
       const SizedBox(height: 12),
       OutlinedButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportRequestsScreen())), child: const Text('My Support Requests')),
+      const AdminDashboardEntry(),
     ]),
   );
 }

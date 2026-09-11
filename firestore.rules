@@ -10,6 +10,11 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Stage 11A: trusted custom claim, never a client-editable profile role.
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.get('admin', false) == true;
+    }
+
     function commonFields() {
       return [
         'uid', 'fullName', 'email', 'phoneNumber', 'city', 'accountType',
@@ -85,8 +90,10 @@ service cloud.firestore {
         );
 
       allow get: if isOwner(userId);
-      // General profile editing and listing remain disabled. Only verified Stage 10 events update metrics.
-      allow list, delete: if false;
+      // Count queries require list permission; only trusted admins may list profiles.
+      // General editing remains disabled. Stage 10 events alone update metrics.
+      allow list: if isAdmin();
+      allow delete: if false;
       allow update: if isSignedIn() && validProfileEvent(userId, resource.data, request.resource.data);
     }
 
@@ -245,7 +252,7 @@ service cloud.firestore {
         && validInitialTripState(request.resource.data);
 
       allow get: if isSignedIn() && canGetTripPost(resource.data);
-      allow list: if isSignedIn() && canListTripPost(resource.data);
+      allow list: if isAdmin() || (isSignedIn() && canListTripPost(resource.data));
       allow update: if isSignedIn()
         && (validTripAcceptance(tripId)
           || validCancellation(tripId, resource.data, request.resource.data)
@@ -769,7 +776,8 @@ service cloud.firestore {
     }
     match /support_requests/{id} {
       allow create: if isSignedIn() && validSupportCreate(id, request.resource.data);
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || supportAdmin());
+      // Primary admins get overview reads only; supportAdmin write powers stay unchanged.
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || supportAdmin() || isAdmin());
       allow update: if isSignedIn()
         && ((request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt', 'lastMessageAt', 'lastMessageId'])
             && !exists(/databases/$(database)/documents/support_requests/$(id)/messages/$(request.resource.data.lastMessageId))
