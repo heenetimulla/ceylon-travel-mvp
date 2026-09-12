@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/admin_dashboard_stats.dart';
+import '../models/admin_user_summary.dart';
 import '../models/support_request.dart';
 import 'admin_data_source.dart';
+import 'admin_user_data_source.dart';
 
 enum AdminAccessStatus { loading, signedOut, denied, error, allowed }
 
@@ -16,14 +18,43 @@ class AdminAccess {
 /// Claims control the UI; Firestore rules independently authorize every read.
 /// No method in this service writes profiles, claims or operational data.
 class AdminService {
-  AdminService({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore, AdminDataSource? dataSource})
+  AdminService({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore, AdminDataSource? dataSource,
+    AdminUserDataSource? userDataSource})
     : _providedAuth = firebaseAuth,
+      _userDataSource = userDataSource ?? FirestoreAdminUserDataSource(firestore: firestore),
       _dataSource = dataSource ?? FirestoreAdminDataSource(firestore: firestore);
   final FirebaseAuth? _providedAuth;
   final AdminDataSource _dataSource;
+  final AdminUserDataSource _userDataSource;
   FirebaseAuth get _auth => _providedAuth ?? FirebaseAuth.instance;
 
   static bool hasAdminClaim(Map<String, dynamic>? claims) => claims?['admin'] == true;
+
+  Future<List<AdminUserSummary>> _readUsers(AdminUserQuery query) async {
+    final before = await readAccess();
+    if (before.status != AdminAccessStatus.allowed || before.uid == null) {
+      throw StateError('Admin access required.');
+    }
+    final users = await _userDataSource.loadUsers(query).timeout(const Duration(seconds: 20));
+    final after = await readAccess();
+    if (after.status != AdminAccessStatus.allowed || before.uid != after.uid) {
+      throw StateError('Admin session changed.');
+    }
+    return users;
+  }
+
+  Future<AdminUserPage> loadUsers({AdminUserFilter filter = AdminUserFilter.all,
+    String? afterUid}) async {
+    final users = await _readUsers(AdminUserQuery(accountType: filter.accountType, afterUid: afterUid));
+    return AdminUserPage(users: users,
+      nextUid: users.length == AdminUserQuery.pageSize ? users.last.uid : null);
+  }
+
+  Future<AdminUserSummary?> loadUser(String uid) async {
+    if (uid.isEmpty || uid.contains('/')) throw ArgumentError('Invalid account ID.');
+    final users = await _readUsers(AdminUserQuery(uid: uid));
+    return users.isEmpty ? null : users.single;
+  }
 
   Future<AdminAccess> readAccess({bool forceRefresh = false}) async {
     final user = _auth.currentUser;

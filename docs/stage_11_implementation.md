@@ -1,4 +1,4 @@
-# Stage 11A: secure admin foundation and overview
+# Stage 11: admin foundation and read-only account management
 
 Implementation only; tests, analyzer, builds, package commands, Firebase and Git were not run.
 
@@ -41,7 +41,7 @@ Added `isAdmin()` using `request.auth.token.get('admin', false) == true`.
 - No grants were added to private trip messages/location, bids, ratings, public projections, support messages or any other subcollection. Parent read permission does not cascade to subcollections.
 - No admin writes, deletes, role assignment, verification, suspension or account-management operations were added.
 
-**Important privilege boundary:** Firestore rules cannot distinguish an aggregate count from a document-list query. The trusted admin claim therefore permits listing complete private user/trip/support parent documents, not only counts or the five UI preview rows. The Flutter UI retrieves only aggregates plus five requests, but this is not a security cap on trusted admins. Normal users do not gain these permissions. If a future staff role must receive totals only, implement a trusted aggregate/projection endpoint before granting that role access; do not grant this primary-admin claim. No broad wildcard admin rule was introduced, and `canGetTripPost` was not expanded (chat relies on it).
+**Important privilege boundary:** Firestore rules cannot distinguish an aggregate count from a document-list query. The trusted admin claim therefore permits listing complete private user/trip/support parent documents, not only counts or the five UI preview rows. The Stage 11A overview retrieves only aggregates plus five requests, but this is not a security cap on trusted admins. Stage 11B uses the same existing user-list permission for account browsing. Normal users do not gain these permissions. If a future staff role must receive totals only, implement a trusted aggregate/projection endpoint before granting that role access; do not grant this primary-admin claim. No broad wildcard admin rule was introduced, and `canGetTripPost` was not expanded (chat relies on it).
 
 `supportAdmin: true` remains a separate existing support-staff claim, with exactly its previous read/reply/status powers. `admin: true` additionally satisfies parent-request read authorization only. It does not implicitly grant support replies, status transitions or conversation reads. Staff who need those powers must retain the explicit supportAdmin claim. A supportAdmin-only user does not receive this primary-admin dashboard.
 
@@ -94,4 +94,49 @@ Tests cover strict claims, unauthenticated/non-admin denial before reads, servic
 
 The watcher regression test consumes explicit loading/signedOut events, resolves a controlled obsolete allowed claim result, then uses another signed-out auth event as a delivery barrier. It no longer assumes that two microtask turns drain stream delivery. The production watchAccess generation guard and authorization behavior are unchanged.
 
-Deferred: individual account/driver management, verification, support inbox/actions, staff roles, destructive operations, analytics, reports, payments and every other later Stage 11 feature. Stage 10 production services, Functions/Cloud Tasks, chat assignment privacy, location, ratings, support writes and theme are unchanged.
+Stage 11A originally deferred individual account/driver management. Stage 11B now adds the read-only portion described below. Verification actions, support inbox/actions, staff roles, destructive operations, analytics, reports, payments and other later Stage 11 features remain deferred. Stage 10 production services, Functions/Cloud Tasks, chat assignment privacy, location, ratings, support writes and theme are unchanged.
+
+## Stage 11B: Admin User & Driver Management
+
+The dashboard now includes **Users & Drivers**, leading to a paginated account browser and a separate read-only detail route. Existing overview counts and recent support requests retain their Stage 11A queries and behavior. Both new routes instantiate their loaders only inside `AdminAccessGate`. The shared `AdminService` is passed through navigation, with optional dependency injection for focused tests.
+
+### Read-only architecture and security
+
+- `AdminUserSummary` retains only UID, name, account type, email, phone, city, status, profile photo path, completed/cancelled trip counts, cancellation rate, average rating, rating count, verification status and created/updated dates. UID comes from the document ID, not the profile field. Missing/null/malformed optional values become unavailable instead of crashing or inventing zeroes. Unknown account types are labeled Unknown; stored tourist/driver values are not migrated.
+- `AdminUserDataSource` is a read-only interface with a production Firestore adapter. `AdminUserQuery` describes the actual bounded requests so tests can capture them without mocking sealed Firestore types. Query logic stays outside widgets.
+- `AdminService.loadUsers` and `loadUser` require the boolean `admin: true` claim before reading, then recheck authorization and the same signed-in UID before returning results. Reads have a 20-second timeout and use `Source.server`. Existing gate behavior removes the subtree on sign-out, claim-check loading/failure/denial or account change. Obsolete pagination/filter responses are ignored after a new request or disposal.
+- `supportAdmin` alone does not grant account management. No profile admin fields, public registration, admin request flow, UID allowlist or claim-writing code was added. No writes/deletes are exposed by the new data source or screens.
+- `firestore.rules` is unchanged for 11B. Details use the already-authorized list operation constrained to one document ID; direct `users/{uid}.get()` remains owner-only. No new permissions are necessary.
+- Firestore returns complete documents for mobile/web collection queries, but only the operational field allowlist is retained by the model or shown. No verification evidence/rejection reason, vehicle documents, message threads, GPS, claims or credentials are displayed. Profile photo paths are text only; no image, Storage or arbitrary URL fetch is attempted. Existing SDK persistence and token-revocation caveats above still apply.
+
+### Exact queries and browsing behavior
+
+| Operation | Firestore request |
+| --- | --- |
+| All accounts | `users.orderBy(FieldPath.documentId).limit(50).get(Source.server)` |
+| Tourist/User | Same query with `where('accountType', isEqualTo: 'tourist')` |
+| Driver | Same query with `where('accountType', isEqualTo: 'driver')` |
+| Subsequent page | Same selected filter/order/limit with `startAfter([lastDocumentId])` |
+| Account detail/refresh | `users.where(FieldPath.documentId, isEqualTo: uid).orderBy(FieldPath.documentId).limit(1).get(Source.server)` |
+
+Ordering is ascending document ID, deliberately not createdAt: ordering on that optional field would silently exclude older profiles without it. No backfill or composite index file change is included. Standard accountType single-field indexes are expected to serve equality plus ascending document ID ordering; live query/index verification remains pending.
+
+Pages contain at most 50 documents. A full page offers Load more; if the collection is an exact multiple of 50, one final empty query establishes completion. All `users` profiles can be browsed, including legacy unknown account types under All. Auth-only registrations without a `users` document cannot be enumerated by this client and are outside this profile browser.
+
+Search is local, case-insensitive substring matching across the loaded names, emails and phones, with punctuation-insensitive phone matching for phone-shaped searches. The UI explicitly says **Search loaded accounts**, shows loaded/matching counts, and keeps Load more available when the current search has no matches. There is no global full-text search or automatic collection scan. The exact role filter runs on the server and resets pagination while retaining search text. Changing filter mid-request discards the old response. Each explicit Load more requests only one page; earlier pages stay in memory until refresh, filter change or gate disposal. Thus per-request reads are bounded, while session memory grows with intentional browsing.
+
+Refresh clears previous list data and starts again; detail refresh hides the prior snapshot while loading. Paging errors retain already loaded rows and offer retry at the same cursor. Errors do not expose raw backend diagnostics. Empty results, unavailable detail, missing profile and loading are distinct states. Paging is not an atomic snapshot; newly created IDs before the current cursor or concurrent profile edits require Refresh. Detail reads are fresh and can differ from a previously loaded card.
+
+Rates follow the existing stored percentage convention (0–100), displayed with one decimal place. Ratings display one decimal place. Driver verification falls back from `verificationStatus` to the existing private `verification.status` field. Dates use the viewer's local timezone. Unknown fields remain unavailable; photo-path presence does not assert that an image exists or was verified.
+
+### Stage 11B files and verification status
+
+Created: `lib/core/models/admin_user_summary.dart`, `lib/core/services/admin_user_data_source.dart`, `lib/screens/admin/admin_users_screen.dart`, `lib/screens/admin/admin_user_detail_screen.dart`, and `test/stage_11b_admin_users_test.dart`.
+
+Modified: `lib/core/services/admin_service.dart`, `lib/screens/admin/admin_dashboard_screen.dart`, and both Stage 11 documentation files. Existing `test/stage_11_admin_test.dart` is retained unchanged to cover Stage 11A regressions.
+
+New focused tests cover service and direct-route denial, bounded query definitions/cursors/server source, authorization changes during list/detail reads, dashboard/list/detail navigation, loading, both roles, all three filters, name/email/phone search, stale filter responses, pagination retry, empty/error/missing-account states, legacy optional fields, read-only controls and detail fields at mobile/desktop widths. These tests use an ordinary Dart data source, not live Firebase; they do not establish Firestore rule/index correctness.
+
+No commands, tests, analyzer, builds, emulator sessions or manual/live UI checks were executed for 11B. The current branch and supplied Stage 11A commit are assumed from the user's context and were not checked with Git. All verification in the Stage 11B checklist in `stage_11_manual_verification.md` remains pending.
+
+**Deferred explicitly:** delete, password reset, accountType changes, admin promotion, suspension, profile edits, driver approval/rejection and all other destructive/account-change operations. These may belong to Stage 11D; no part of them is implemented here.

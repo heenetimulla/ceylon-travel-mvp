@@ -6,6 +6,7 @@ import '../../core/services/admin_service.dart';
 import '../../core/widgets/admin_access_gate.dart';
 import '../../core/widgets/admin_stat_card.dart';
 import '../../core/widgets/app_components.dart';
+import 'admin_users_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key, this.service});
@@ -66,6 +67,13 @@ class _OverviewState extends State<_Overview> {
       }
       final data = snapshot.data!;
       return ListView(padding: appPagePadding(context), children: [
+        Card(child: ListTile(key: const Key('admin_users_entry'),
+          leading: const Icon(Icons.people_outline),
+          title: const Text('Users & Drivers'),
+          subtitle: const Text('Browse accounts and view operational details'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+            builder: (_) => AdminUsersScreen(service: widget.service))))),
         Row(children: [const Expanded(child: AppSectionHeader('Operations overview',
           subtitle: 'Current accounts, trips and support activity')),
           IconButton(tooltip: 'Refresh overview', onPressed: () => setState(() => _data = widget.service.loadDashboard()),
