@@ -6,6 +6,7 @@ import '../../core/widgets/app_components.dart';
 import '../../core/widgets/reputation_summary.dart';
 import '../support/support_screens.dart';
 import '../admin/admin_dashboard_screen.dart';
+import '../admin/admin_support_inbox_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -30,6 +31,7 @@ class _AccountScreenState extends State<AccountScreen> {
       const SizedBox(height: 12),
       OutlinedButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportRequestsScreen())), child: const Text('My Support Requests')),
       const AdminDashboardEntry(),
+      const AdminSupportEntry(),
     ]),
   );
 }

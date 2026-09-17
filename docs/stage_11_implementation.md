@@ -1,4 +1,4 @@
-# Stage 11: admin foundation and read-only account management
+# Stage 11: admin foundation, account management and support inbox
 
 Implementation only; tests, analyzer, builds, package commands, Firebase and Git were not run.
 
@@ -94,7 +94,7 @@ Tests cover strict claims, unauthenticated/non-admin denial before reads, servic
 
 The watcher regression test consumes explicit loading/signedOut events, resolves a controlled obsolete allowed claim result, then uses another signed-out auth event as a delivery barrier. It no longer assumes that two microtask turns drain stream delivery. The production watchAccess generation guard and authorization behavior are unchanged.
 
-Stage 11A originally deferred individual account/driver management. Stage 11B now adds the read-only portion described below. Verification actions, support inbox/actions, staff roles, destructive operations, analytics, reports, payments and other later Stage 11 features remain deferred. Stage 10 production services, Functions/Cloud Tasks, chat assignment privacy, location, ratings, support writes and theme are unchanged.
+Stage 11A originally deferred individual account/driver management; Stage 11B adds its read-only portion. Stage 11C adds the support inbox/actions described below. Verification actions, staff role management, destructive account operations, analytics, reports, payments and other later Stage 11 features remain deferred. Stage 10 production services, Functions/Cloud Tasks, chat assignment privacy, location, ratings, customer support writes and theme are unchanged.
 
 ## Stage 11B: Admin User & Driver Management
 
@@ -140,3 +140,75 @@ New focused tests cover service and direct-route denial, bounded query definitio
 No commands, tests, analyzer, builds, emulator sessions or manual/live UI checks were executed for 11B. The current branch and supplied Stage 11A commit are assumed from the user's context and were not checked with Git. All verification in the Stage 11B checklist in `stage_11_manual_verification.md` remains pending.
 
 **Deferred explicitly:** delete, password reset, accountType changes, admin promotion, suspension, profile edits, driver approval/rejection and all other destructive/account-change operations. These may belong to Stage 11D; no part of them is implemented here.
+
+## Stage 11C: Admin Support / Complaint Inbox
+
+Stage 11C adds Support & Complaints to the admin dashboard, retaining all existing statistics, recent support preview and Users & Drivers navigation. A separate claim-gated entry on Account & Support makes the same inbox available to support-only staff without admitting them to the primary-admin dashboard. Stage 11A/11B production services and account permissions are unchanged. The user reports Stage 11B live UI verification complete at commit `bd89f59`; branch/base are supplied context, not independently checked with Git.
+
+### Authorization decision: approach B
+
+Only the boolean Firebase Auth custom claim `supportAdmin: true` grants inbox, thread, reply and status-management access. Primary `admin: true` alone keeps its existing parent-request reads but cannot enter the staff inbox, read others' message threads/audit history or perform staff writes. Normal owners retain their existing own-request conversation permissions. An owner who happens to have only the primary-admin claim still acts as an ordinary owner, not staff.
+
+The existing trusted operator CLI grants both admin and supportAdmin. Primary admins needing this feature must have both claims and refresh/sign in again; there is no automatic client promotion. Support-only staff use the Account entry and do not gain user-list/trip-list/admin-dashboard permissions. No profile field or accountType grants staff access.
+
+`AdminSupportService` reuses the existing AdminService token watcher/gate lifecycle with its own support-claim check. Both routes pass through `AdminSupportGate`; the generic gate's new optional messages preserve its existing defaults. Reads check access before and after completion and reject changed UIDs. Transactions capture the authenticated UID, check it again inside each transaction attempt, and let Firestore independently enforce the current token's permissions. UI generations/disposal prevent obsolete reads from being displayed. Issued-token revocation and SDK-cache caveats still apply.
+
+### Architecture and data
+
+- `admin_support_data.dart`: existing SupportRequest/SupportMessage models reused through a tolerant admin projection; stored status constants, filter/search helpers, timestamp/ID cursor, generic pages and immutable status-event model. It does not modify the existing customer parsers or write schema.
+- `admin_support_data_source.dart`: server-source bounded queries and Firestore transactions behind a small injectable interface. `SupportStaffWrites` defines the exact production payload allowlists used by the adapter and tested directly.
+- `admin_support_service.dart`: authorization, validation, read timeouts, actor checks and orchestration. Widgets contain no Firestore queries or writes.
+- Inbox: loading/error/retry/empty states, status filters, local search, cursor paging and refresh. It refreshes on return from a detail route. Detail: original request, automatic acknowledgement, immutable submitted contact, requester name/role/UID, optional human-readable trip reference, timestamps with year, paged conversation and audit history, reply composer and status controls.
+
+Identity comes only from the support request's existing submitted userName/userRole/userId snapshot. No extra private-profile fetch or email lookup is added. Original contactNumber is never replaced with a current profile phone. Trip linkage is optional; general Contact Us requests need no trip. Existing complaint subcategory labels are reused. No complaint triggers penalties, ratings changes or account actions.
+
+### Exact read queries
+
+All requests use `Source.server`; read operations have a 20-second bound. Page size is 50.
+
+| Read | Query |
+| --- | --- |
+| Inbox All | `support_requests.orderBy(createdAt, descending: true).orderBy(documentId, descending: true).limit(50)` |
+| Status filter | Same, with `where(status, whereIn: selectedStatuses)` |
+| Detail parent | `support_requests/{id}.get()` |
+| Messages | `support_requests/{id}/messages.orderBy(createdAt).orderBy(documentId).limit(50)` |
+| Status history | `support_requests/{id}/status_history.orderBy(createdAt).orderBy(documentId).limit(50)` |
+| Next page | Same query plus `startAfter([rawCreatedAtTimestamp, documentId])` |
+
+Cursors retain raw Timestamp precision and use document IDs to break ties. Inbox ordering is newest-created first, avoiding moving last-message cursors during conversations. Messages/history are oldest-first with explicit Load more controls; every page is reachable. The full original request and generated acknowledgement are shown separately, consistent with the existing customer thread. The acknowledgement is not a fabricated stored message.
+
+The new composite index is `support_requests(status ASC, createdAt DESC)` with the default descending document-name tie-breaker. Existing indexes are retained. No dependency upgrades are required.
+
+Search covers only loaded rows in the selected filter: support/trip reference, contact number (including digit-normalized searches), submitted name, UID, category/subcategory and subject. There is no global full-text query, email lookup or automatic full-collection scan. Filtering is server-side using exact stored values. A full page offers another page; an exact multiple of 50 needs a final empty read. Previously loaded rows stay in memory until refresh/filter change/disposal, so per-query reads are bounded while intentional browsing can grow session memory.
+
+There is no polling or live listener in the admin inbox/thread. Staff use Refresh to receive later replies/status changes; successful writes reload the first conversation/history page. Load more reaches subsequent messages, including a newly sent reply in a long thread. The customer thread's existing live listener remains unchanged. Separate reads/pages are not a single consistent snapshot. A request that changes status between filtered pages may require refresh; IDs are deduplicated locally.
+
+`createdAt` is required by the existing support-create/reply rules. Ordering excludes any out-of-schema historical records missing that field; no migration/backfill is performed. Optional trip fields and missing/malformed display data are safe. Date parsing retains Firestore Timestamp and DateTime instants in UTC, with local display. Unknown statuses display as stored but cannot be changed through this workflow.
+
+### Replies and retry behavior
+
+A reply transaction reads the parent and the selected new message document. It rejects missing/closed requests, then appends exactly `id`, authenticated `senderId`, `senderRole: admin`, trimmed `message` (1–4000 characters) and server `createdAt`. The same transaction updates only parent `updatedAt`, `lastMessageAt` and `lastMessageId`. Previous messages are never overwritten, edited or deleted. The customer UI already labels the admin role as Support team.
+
+The client allocates an operation ID once for a draft submission and retains it on an unconfirmed result. Retrying unchanged text uses that same ID. If the transaction finds that ID with the same actor/role/text, it returns without another write; conflicting reuse fails. Editing the draft begins a new operation. Status operations use the same approach with actor/from/to. This idempotency is scoped to the retained screen operation: closing the screen loses the pending ID, so after an ambiguous outcome staff should refresh/check history before composing another action. No reply is fabricated locally. The screen clears the draft only after confirmed success. There is no additional client timeout or automatic retry loop around mutations; Firestore manages transaction retries.
+
+### Status workflow and append-only audit
+
+Stored states remain **open**, **in_review**, **resolved**, **closed**. In Progress is only the display label for in_review. The inbox combines resolved/closed in one filter; the detail selector keeps them distinct. Staff may deliberately transition between distinct supported states, including reopening closed requests. No automatic closure or migration occurs. Closed requests reject replies under the existing rules until explicitly reopened. Resolved requests still permit replies, matching the previous schema.
+
+A status transaction compares the current stored status with the displayed expected status. Concurrent status changes fail safely and require refresh. It writes only `status`, server `updatedAt` and `lastStatusEventId` on the parent, and creates `status_history/{operationId}` containing only `id`, authenticated `actorId`, `fromStatus`, `toStatus`, server `createdAt`. No owner/reference/category/contact/trip/original-message/creation-time or last-message metadata changes are permitted. Each successful transition is attributed and timestamped. Old transitions before this feature cannot be reconstructed and are labeled accordingly; there is no invented audit history.
+
+### Narrow rule change
+
+Parent support reads, all message rules and all unrelated collection permissions retain their existing scope. The former supportAdmin status-update branch now additionally requires a matching **new** status_history event in the same atomic write. The event rule checks the before/after parent status, actor, allowed states, changed status, server timestamps, pointer and exact parent/event field allowlists. Status-only writes without history, history-only writes, forged actors and changing immutable parent fields must fail.
+
+The new status_history subcollection is readable only by supportAdmin, create-only through that linked validation, and never updateable/deletable. Parent and message deletes remain denied; message updates remain denied. The change tightens existing status-writing semantics rather than granting primary admins new powers. Any external legacy staff client that wrote status directly without audit must be updated before using the new rules; there was no such Flutter staff writer in this repository. Deploy the narrow rules and index manually before enabling Stage 11C writes.
+
+### Files, tests and verification status
+
+Created: `lib/core/models/admin_support_data.dart`, `lib/core/services/admin_support_data_source.dart`, `lib/core/services/admin_support_service.dart`, `lib/core/widgets/admin_support_components.dart`, `lib/screens/admin/admin_support_inbox_screen.dart`, `lib/screens/admin/admin_support_detail_screen.dart`, `test/stage_11c_admin_support_test.dart`.
+
+Modified: `lib/core/widgets/admin_access_gate.dart` (optional support-specific text only), `lib/screens/admin/admin_dashboard_screen.dart` (navigation and injected test service), `lib/screens/auth/account_screen.dart` (staff entry), `firestore.rules`, `firestore.indexes.json`, and these two Stage 11 documents. Existing customer support service/models/screens and Stage 11A/11B test files are unchanged.
+
+Focused tests cover strict support claims, denied reads/writes, exact mutation payloads/immutable parent fields, existing status whitelist, query filters/cursors, stale reads, search, loading/error/empty/retry states, staff/dashboard navigation, optional trips, submitted contact, history display, reply operation IDs, status selection, closed-request behavior, sign-out disposal and 360/1400px layouts. Pure Dart fakes exercise the service/UI boundaries; they do not establish live transaction, index or rules correctness. Detailed negative server checks are in the manual verification document.
+
+No commands, analyzer, tests, build, emulator/manual UI testing, Firebase, Git, npm or package upgrades were executed. No branch merge or deployment was performed. All Stage 11C verification remains pending with the user. No suspension, approval, role management, account deletion, automated penalties, notifications, reports or analytics were added.

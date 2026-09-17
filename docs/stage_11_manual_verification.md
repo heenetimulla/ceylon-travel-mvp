@@ -1,4 +1,4 @@
-# Stage 11A and 11B manual verification
+# Stage 11A, 11B and 11C manual verification
 
 All checks are for the operator. Codex did not execute tests, analyzer, builds, Firebase commands, npm, package changes or Git commands.
 
@@ -62,7 +62,7 @@ Check actual server reads, not just hidden buttons. Rule tests must exercise que
 
 Verify login/registration, ordinary Account & Support links, dashboard identity/order, tourist and partner trip creation, bidding/acceptance, cancellation/reopen/exclusion, three-minute auto-start, thirty-minute auto-complete, completed statistics, mutual ratings/reviews/public profiles, support creation/contact snapshots/two-way messaging, private assignment-specific text/GPS chat, map launching and Sri Lanka trip references. No Stage 10 backend, schema, service or timing behavior should change.
 
-Stage 11B adds only Users & Drivers browsing and read-only details. No deletion, moderation, verification actions, role upgrades, full support inbox or reporting controls should appear.
+Stage 11B adds only Users & Drivers browsing and read-only details. Stage 11C adds the support inbox below. No deletion, account moderation, verification actions, role upgrades or reporting controls should appear.
 
 ## Stage 11B: pending operator verification
 
@@ -106,3 +106,72 @@ Use the project's normal build for any additional target platforms you support. 
 1. Inspect 360px mobile and 1400px desktop widths, long names/emails/UIDs/photo paths, large text scaling, keyboard search, scrolling, focus/semantics, filter controls and back navigation. There should be no overflow and field values should remain readable/selectable on details.
 2. Inspect all list/detail controls: only search, filters, pagination, refresh, retry, access recheck, view and navigation are expected. Confirm absence of delete user, reset password, change accountType, grant admin, suspend account, edit profile and approve/reject driver actions. All destructive/account-change operations are deferred, potentially to Stage 11D.
 3. Repeat the Stage 11A overview checks above: all eight statistics, loading/error/refresh states, latest five support requests, contact snapshot and access gating. Repeat the normal app regression checks; no support, trip, rating, chat or user-registration behavior should change.
+
+## Stage 11C: pending manual/live verification
+
+All checks below are pending. Codex performed coding/documentation changes only, with no commands, test runs, analyzer, builds, deployments, emulator or manual UI sessions. Stage 11B live UI was reported verified by the user. The intended branch/base are `feature/stage-11` / `bd89f59`; no Git commands or merge were performed.
+
+### Operator verification commands and setup
+
+Run manually from the intended checkout:
+
+```text
+flutter analyze
+flutter test test/stage_11_admin_test.dart test/stage_11b_admin_users_test.dart test/stage_11c_admin_support_test.dart
+flutter test
+flutter build web
+```
+
+Use the normal build workflow for any other supported targets. Review the narrow support audit rules and new `support_requests(status ASC, createdAt DESC)` index; deploy them through the approved manual Firebase workflow and wait for index readiness before live testing. No Functions deployment or dependency upgrade is required. Retain the existing messages/assignment index. Confirm no unintended files or Stage 11A/11B behavior changed.
+
+Use safe test data in the intended environment. Prepare an ordinary owner, a different ordinary account, a primary-admin-only account, a supportAdmin-only account and an account with both claims. Use the trusted operator process to provision the desired claims and refresh/sign in; never edit accountType or profile admin fields. Existing issued-token validity caveats apply.
+
+### Authorization matrix (verify server operations, not only hidden UI)
+
+| Actor | Expected Stage 11C behavior |
+| --- | --- |
+| Signed out, ordinary tourist/driver, false/string supportAdmin | No staff entry; inbox/detail denied; no staff operations |
+| admin true only | Existing dashboard/users/parent preview access remains; staff inbox, other users' threads/history and staff writes denied |
+| supportAdmin true only | Account staff entry, inbox, threads, reply and audited status change allowed; no primary-admin dashboard or Users & Drivers access |
+| Both boolean claims | Dashboard Support & Complaints entry and all intended staff operations allowed |
+| Request owner without staff claim | Existing own request/messages and user reply work; no staff-role reply, status change or status_history access |
+| Different ordinary user | Another request/thread/history read or write denied |
+
+1. Open both staff routes directly for every actor. Verify sign-in, denied and token-error states do not load private data. Confirm no profile field grants support access.
+2. Sign out/change account/refresh revoked claims while inbox, detail, pagination or a write is pending. Content and drafts must disappear on gate disposal and late results must not reappear. A transaction already committed may remain committed; the client must not claim to roll it back. Test returning to a route underneath the active route.
+3. Confirm primary-admin-only staff denial does not affect existing dashboard parent support preview or stats. The operator CLI's ordinary grant already supplies both claims; do not silently expand rules for a missing staff claim.
+
+### Inbox, search and layout
+
+1. Seed/reuse more than 50 requests covering all four stored states, including tied createdAt timestamps, general questions and trip complaints from both roles. Verify newest-created order, descending document-ID tie-breaker, 50-row pages, no duplicates and final completion. Check an exact 50-record filter requires a final empty read. Inspect actual server queries/index use.
+2. Verify All, Open, In Progress (`in_review`), and Resolved / Closed (`resolved`, `closed`). No `in_progress` status should be stored. Change filter while a query is pending and ensure stale results cannot replace it.
+3. Search loaded rows by SUP reference, CT reference, contact digits/formatted number, submitted name, category/subcategory and subject. Search must perform no query per keystroke and must not claim global completeness. A matching request on page two should appear after Load more even when page one has no matches.
+4. Verify row identity, UID, submitted contact snapshot, optional trip reference, created/updated/last-message times. Change the owner's profile phone externally and confirm the submitted contact remains unchanged. No extra profile/email/private-data lookup should occur.
+5. Check empty collection/filter, no search match, slow reads, offline/permission/index failures, safe errors, retry at the same page cursor and refresh. Refresh clears stale data; server reads must not fall back to cache. Requests missing createdAt are outside the existing schema and excluded by ordering; identify such records separately if they exist, without automatic migration.
+6. Inspect 360px mobile and 1400px desktop widths, large text scaling, long references/names/phone numbers, keyboard search, focus, scrolling and hit-testable navigation buttons. Confirm the existing theme and rounded cards remain consistent. Returning from details should refresh the inbox.
+
+### Full conversation and replies
+
+1. Open a general request and a trip complaint. Verify original subject/message, generated acknowledgement, submitted name/role/UID/contact, optional human-readable trip reference and all available dates including year/local time. A general request must not need tripId/tripReference.
+2. Use a thread with more than 50 messages, including identical timestamps. Load every page oldest-first; verify no missing/duplicate messages, author labels/UIDs, immutable text and timestamps. Test paging errors/retry and empty history. Staff Refresh picks up new customer replies; no live listener is promised in the admin UI.
+3. Send a staff reply and inspect Firestore: exactly one new message with id, authenticated senderId, senderRole `admin`, trimmed text and server createdAt; parent changes only updatedAt/lastMessageAt/lastMessageId. Prior messages and original request/contact/category/trip/owner/reference fields must remain byte-for-byte unchanged.
+4. Verify the customer thread receives the reply as Support team through its existing listener, then send a customer response and refresh staff view. No custom claims should appear in message text. No fake pending/success message should be appended locally.
+5. Try blank/whitespace-only, 4000-character and 4001-character replies, double taps, offline failures and permission loss. Pending sends disable actions; failed sends retain the draft. Retry identical text on the same screen and confirm the same operation ID produces at most one message, including an already-committed/unconfirmed outcome. Reusing that ID with different actor/text/role must fail. Closing the screen loses the in-memory pending ID; refresh/check the thread before a new submission after ambiguous outcomes.
+6. Close a request and confirm replies fail at both UI and rules. Explicitly reopen it to reply again. Resolved requests still accept replies as before. Confirm no automatic closure.
+7. Directly attempt message update/delete, parent delete, changing sender identity/role, missing parent metadata updates, wrong timestamps, extra message fields and overwriting an existing message ID: all must fail under existing message rules. Ordinary owners may still send only `user` replies to their own non-closed requests.
+
+### Status workflow and audit-rule negative checks
+
+1. Exercise open → in_review → resolved → closed and an intentional reopening. Confirm only status/updatedAt/lastStatusEventId change on the parent, and exactly one new status_history document records id, real actorId, prior state, new state and server createdAt. Verify dates and staff UID appear in paged status history. Existing unaudited records must not receive invented history.
+2. With two staff sessions, change a status in one session, then submit a different transition from stale state in the other. The transaction must reject it and instruct refresh; it must not silently overwrite the new state. Repeat the same completed operation ID and ensure no duplicate event or stale parent rewrite occurs.
+3. Attempt a status-only update without an audit event, an event-only create without the parent update, an existing/reused event pointer, mismatched parent/event destination, incorrect previous status, same-status event, forged actor, client timestamp or unsupported state (`in_progress`, `suspended`, etc.). Every attempt must be denied. Verify actor and timestamp consistency under a real atomic batch/transaction.
+4. Attempt to combine a status update with changes to userId, supportReference, original contactNumber, category/subCategory, tripId/tripReference, userName/userRole, original message/subject, createdAt or last-message metadata. All such combined writes must fail. An unrelated field cannot be added through the status path.
+5. Attempt audit-event update/delete and parent/message delete as staff: denied. Attempt audit reads/writes as owner, unrelated user or primary-admin-only: denied. Ensure valid existing customer creates/replies still pass after a lastStatusEventId has been added to the parent.
+6. Test any separately maintained older staff tool: direct status writes without a linked audit event are deliberately no longer allowed. Update such tools to the atomic schema before using the new rules; no unaudited fallback is permitted.
+7. Verify history paging beyond 50 events, tied timestamps, safe retry and refresh. Parent/history/message loads are separately consistent; refresh after concurrent changes.
+
+### Regression and scope
+
+Repeat Stage 11A stats/recent support/authorization checks and Stage 11B navigation, search/filter, read-only details and pagination. Confirm normal Contact Us submissions, immutable contact snapshots, automatic acknowledgements and two-way customer threads still work. Repeat the existing trip, rating and private chat/GPS regression checks. No account suspension/approval/deletion, admin role management, message edits/deletes, automated penalties, notifications, daily reports or analytics controls should exist.
+
+The new Dart tests use ordinary fakes and exact production payload builders. Live Firestore transaction idempotency, rule enforcement, concurrent changes and index readiness remain manual/integration checks; no emulator/rules execution was performed by Codex.

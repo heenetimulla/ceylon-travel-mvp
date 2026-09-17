@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import '../services/admin_service.dart';
 
 class AdminAccessGate extends StatefulWidget {
-  const AdminAccessGate({super.key, required this.service, required this.builder, this.hideWhenDenied = false});
+  const AdminAccessGate({super.key, required this.service, required this.builder, this.hideWhenDenied = false,
+    this.deniedMessage = 'Access denied. An administrator account is required.',
+    this.signedOutMessage = 'Please sign in to access the admin dashboard.'});
   final AdminService service;
   final Widget Function(BuildContext, String) builder;
   final bool hideWhenDenied;
+  final String deniedMessage, signedOutMessage;
   @override
   State<AdminAccessGate> createState() => _AdminAccessGateState();
 }
@@ -26,9 +29,9 @@ class _AdminAccessGateState extends State<AdminAccessGate> {
         return const Center(child: CircularProgressIndicator(semanticsLabel: 'Checking admin access'));
       }
       final message = switch (access.status) {
-        AdminAccessStatus.signedOut => 'Please sign in to access the admin dashboard.',
+        AdminAccessStatus.signedOut => widget.signedOutMessage,
         AdminAccessStatus.error => 'Could not verify admin access. Please try again.',
-        _ => 'Access denied. An administrator account is required.',
+        _ => widget.deniedMessage,
       };
       return Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(
         mainAxisSize: MainAxisSize.min, children: [

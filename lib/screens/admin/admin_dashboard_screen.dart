@@ -7,10 +7,13 @@ import '../../core/widgets/admin_access_gate.dart';
 import '../../core/widgets/admin_stat_card.dart';
 import '../../core/widgets/app_components.dart';
 import 'admin_users_screen.dart';
+import 'admin_support_inbox_screen.dart';
+import '../../core/services/admin_support_service.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({super.key, this.service});
+  const AdminDashboardScreen({super.key, this.service, this.supportService});
   final AdminService? service;
+  final AdminSupportService? supportService;
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
@@ -21,7 +24,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: const AppPageAppBar(title: Text('Admin Dashboard')),
     body: AdminAccessGate(service: _service,
-      builder: (context, uid) => _Overview(service: _service)),
+      builder: (context, uid) => _Overview(service: _service, supportService: widget.supportService)),
   );
 }
 
@@ -45,8 +48,9 @@ class _AdminDashboardEntryState extends State<AdminDashboardEntry> {
 }
 
 class _Overview extends StatefulWidget {
-  const _Overview({required this.service});
+  const _Overview({required this.service, this.supportService});
   final AdminService service;
+  final AdminSupportService? supportService;
   @override
   State<_Overview> createState() => _OverviewState();
 }
@@ -67,6 +71,12 @@ class _OverviewState extends State<_Overview> {
       }
       final data = snapshot.data!;
       return ListView(padding: appPagePadding(context), children: [
+        Card(child: ListTile(key: const Key('admin_support_entry'),
+          leading: const Icon(Icons.support_agent), title: const Text('Support & Complaints'),
+          subtitle: const Text('Review conversations and manage support requests'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+            builder: (_) => AdminSupportInboxScreen(service: widget.supportService))))),
         Card(child: ListTile(key: const Key('admin_users_entry'),
           leading: const Icon(Icons.people_outline),
           title: const Text('Users & Drivers'),

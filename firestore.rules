@@ -774,21 +774,46 @@ service cloud.firestore {
         && d.createdAt == request.time && a.updatedAt == request.time && a.lastMessageAt == request.time && a.lastMessageId == messageId
         && a.diff(b).affectedKeys().hasOnly(['updatedAt', 'lastMessageAt', 'lastMessageId']);
     }
+    // Stage 11C: every staff status transition has an atomic, immutable audit event.
+    function validSupportStatusChange(id, eventId, d) {
+      let parentPath = /databases/$(database)/documents/support_requests/$(id);
+      let b = get(parentPath).data;
+      let a = getAfter(parentPath).data;
+      return supportAdmin()
+        && d.keys().hasAll(['id', 'actorId', 'fromStatus', 'toStatus', 'createdAt'])
+        && d.keys().hasOnly(['id', 'actorId', 'fromStatus', 'toStatus', 'createdAt'])
+        && d.id == eventId && d.actorId == request.auth.uid
+        && d.fromStatus == b.status && d.toStatus == a.status && d.fromStatus != d.toStatus
+        && d.fromStatus in ['open', 'in_review', 'resolved', 'closed']
+        && d.toStatus in ['open', 'in_review', 'resolved', 'closed']
+        && d.createdAt == request.time && a.updatedAt == request.time
+        && a.lastStatusEventId == eventId
+        && a.diff(b).affectedKeys().hasOnly(['status', 'updatedAt', 'lastStatusEventId']);
+    }
     match /support_requests/{id} {
       allow create: if isSignedIn() && validSupportCreate(id, request.resource.data);
-      // Primary admins get overview reads only; supportAdmin write powers stay unchanged.
+      // Primary admin alone retains parent reads; conversations/writes require supportAdmin.
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || supportAdmin() || isAdmin());
       allow update: if isSignedIn()
         && ((request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt', 'lastMessageAt', 'lastMessageId'])
             && !exists(/databases/$(database)/documents/support_requests/$(id)/messages/$(request.resource.data.lastMessageId))
             && validSupportReply(id, request.resource.data.lastMessageId, getAfter(/databases/$(database)/documents/support_requests/$(id)/messages/$(request.resource.data.lastMessageId)).data))
-          || (supportAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
-            && request.resource.data.status in ['open', 'in_review', 'resolved', 'closed'] && request.resource.data.updatedAt == request.time));
+          || (supportAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'lastStatusEventId'])
+            && request.resource.data.lastStatusEventId is string
+            && !exists(/databases/$(database)/documents/support_requests/$(id)/status_history/$(request.resource.data.lastStatusEventId))
+            && validSupportStatusChange(id, request.resource.data.lastStatusEventId,
+              getAfter(/databases/$(database)/documents/support_requests/$(id)/status_history/$(request.resource.data.lastStatusEventId)).data)));
       allow delete: if false;
     }
     match /support_requests/{id}/messages/{messageId} {
       allow read: if supportOwner(id) || supportAdmin();
       allow create: if isSignedIn() && validSupportReply(id, messageId, request.resource.data);
+      allow update, delete: if false;
+    }
+    match /support_requests/{id}/status_history/{eventId} {
+      allow read: if supportAdmin();
+      allow create: if validSupportStatusChange(id, eventId, request.resource.data);
       allow update, delete: if false;
     }
 
