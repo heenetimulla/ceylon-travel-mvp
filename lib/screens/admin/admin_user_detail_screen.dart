@@ -1,14 +1,19 @@
+import '../../core/widgets/registration_application_panel.dart';
 import 'package:flutter/material.dart';
 import '../../app/app_text_styles.dart';
 import '../../core/models/admin_user_summary.dart';
 import '../../core/services/admin_service.dart';
 import '../../core/widgets/admin_access_gate.dart';
 import '../../core/widgets/app_components.dart';
+import '../../core/services/driver_administration_service.dart';
+import '../../core/widgets/driver_administration_panel.dart';
 
 class AdminUserDetailScreen extends StatefulWidget {
-  const AdminUserDetailScreen({super.key, required this.uid, this.service});
+  const AdminUserDetailScreen({super.key, required this.uid, this.service, this.driverService, this.paymentFocus = false});
   final String uid;
   final AdminService? service;
+  final DriverAdministrationService? driverService;
+  final bool paymentFocus;
   @override
   State<AdminUserDetailScreen> createState() => _AdminUserDetailScreenState();
 }
@@ -19,25 +24,30 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: const AppPageAppBar(title: Text('Account details')),
     body: AdminAccessGate(service: _service, builder: (context, adminUid) =>
-      _AccountDetails(key: ValueKey(widget.uid), uid: widget.uid, service: _service)),
+      _AccountDetails(key: ValueKey(widget.uid), uid: widget.uid, service: _service, paymentFocus: widget.paymentFocus,
+        driverService: widget.driverService ?? DriverAdministrationService(adminService: _service))),
   );
 }
 
 class _AccountDetails extends StatefulWidget {
-  const _AccountDetails({super.key, required this.uid, required this.service});
+  const _AccountDetails({super.key, required this.uid, required this.service, required this.driverService, required this.paymentFocus});
   final String uid;
   final AdminService service;
+  final DriverAdministrationService driverService;
+  final bool paymentFocus;
   @override
   State<_AccountDetails> createState() => _AccountDetailsState();
 }
 
 class _AccountDetailsState extends State<_AccountDetails> {
   late Future<AdminUserSummary?> _data = widget.service.loadUser(widget.uid);
+  int _revision = 0;
 
   void _reload() {
     if (!mounted) return;
     final next = widget.service.loadUser(widget.uid);
     setState(() {
+      _revision++;
       _data = next;
     });
     // FutureBuilder ignores completions from a replaced future or disposed state.
@@ -76,7 +86,8 @@ class _AccountDetailsState extends State<_AccountDetails> {
         'Email': user.email,
         'Phone number': user.phoneNumber,
         'City': user.city,
-        'Status': user.status,
+        'Status': user.statusLabel,
+        'Registration status': user.registrationStatus,
         'Created': _date(context, user.createdAt),
         'Updated': _date(context, user.updatedAt),
         'Completed trips': user.completedTripsCount,
@@ -89,8 +100,11 @@ class _AccountDetailsState extends State<_AccountDetails> {
         'Profile photo path': user.profilePhotoPath,
       };
       return ListView(padding: appPagePadding(context), children: [
+        if (widget.paymentFocus && user.accountType == 'driver') DriverAdministrationPanel(key: ValueKey('payment_$_revision'), uid: user.uid,
+          admin: true, service: widget.driverService, showIdentity: false),
         Row(children: [
-          Expanded(child: AppSectionHeader(user.displayName, subtitle: 'Read-only account details')),
+          Expanded(child: AppSectionHeader(user.displayName,
+            subtitle: user.accountType == 'driver' ? 'Account details and driver administration' : user.registrationStatus == null ? 'Read-only account details' : 'Account details and application review')),
           IconButton(tooltip: 'Refresh account',
             onPressed: _reload,
             icon: const Icon(Icons.refresh)),
@@ -102,6 +116,8 @@ class _AccountDetailsState extends State<_AccountDetails> {
               const SizedBox(height: 4),
               SelectableText('${entry.value ?? 'Not available'}', style: AppTextStyles.body),
             ]))).toList()),
+        if (user.registrationStatus != null) RegistrationApplicationPanel(key: ValueKey('application_$_revision'), uid: user.uid, admin: true, onChanged: _reload),
+        if (!widget.paymentFocus && user.accountType == 'driver') DriverAdministrationPanel(key: ValueKey('driver_$_revision'), uid: user.uid, admin: true, service: widget.driverService),
       ]);
     });
 }

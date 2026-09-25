@@ -1,8 +1,10 @@
+import '../models/registration_application.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/bid.dart';
 import '../models/trip_post.dart';
+import '../models/driver_administration.dart';
 
 class BidService {
   BidService({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
@@ -96,10 +98,10 @@ class BidService {
         final bidSnapshot = await transaction.get(bidRef);
         final profileData = profile.data();
         if (profileData == null ||
-            profileData['status'] != 'active' ||
+            !applicationOperational(profileData) ||
             !['tourist', 'driver'].contains(profileData['accountType'])) {
           throw const BidServiceException(
-            'Your account must be active to accept a bid.',
+            registrationAccessMessage,
           );
         }
         final trip = tripSnapshot.data();
@@ -232,7 +234,7 @@ class BidService {
         'Your profile could not be found. Please sign in again.',
       );
     }
-    if (data['status'] != 'active') {
+    if (!applicationOperational(data)) {
       throw const BidServiceException(
         'Your account must be active to view bids.',
       );
@@ -345,9 +347,14 @@ class BidService {
           'Your profile could not be found. Please sign in again.',
         );
       }
-      if (data['status'] != 'active' || data['accountType'] != 'driver') {
+      if (!applicationOperational(data) || data['accountType'] != 'driver') {
         throw const BidServiceException(
           'Only active driver accounts can submit bids.',
+        );
+      }
+      if (!driverCanBid(data)) {
+        throw const BidServiceException(
+          driverEligibilityMessage,
         );
       }
       final name = data['fullName'];
@@ -433,7 +440,8 @@ class BidService {
           );
         case 'permission-denied':
           throw const BidServiceException(
-            'Could not submit this bid. You may have already submitted a bid for this trip, or the trip is no longer available.',
+            'Could not submit this bid. Check your driver verification and membership activation. '
+            'You may also have already submitted a bid, or the trip may no longer be available.',
           );
         case 'unavailable':
         case 'network-request-failed':

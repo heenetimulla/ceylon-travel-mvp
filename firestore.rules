@@ -20,7 +20,8 @@ service cloud.firestore {
         'uid', 'fullName', 'email', 'phoneNumber', 'city', 'accountType',
         'profilePhotoPath', 'status', 'averageRating', 'completedTripsCount',
         'cancelledTripsCount', 'cancellationRate', 'createdAt', 'updatedAt',
-        'ratingsCount', 'ratingStarsTotal', 'cancellationCount'
+        'ratingsCount', 'ratingStarsTotal', 'cancellationCount',
+        'registrationStatus', 'accountStatus', 'applicationRevision'
       ];
     }
 
@@ -28,13 +29,15 @@ service cloud.firestore {
       return data.keys().hasAll(commonFields())
         && data.uid == request.auth.uid
         && data.fullName is string
-        && data.email is string
+        && data.email is string && data.email == request.auth.token.get('email', '')
         && data.phoneNumber is string
         && data.phoneNumber.size() > 0
         && data.phoneNumber.matches('.*[0-9].*')
         && data.city is string
         && data.accountType in ['tourist', 'driver']
         && data.status == 'active'
+        && data.registrationStatus == 'draft' && data.accountStatus == 'pending_approval'
+        && data.applicationRevision is int && data.applicationRevision == 0
         && data.profilePhotoPath == null
         && data.ratingsCount == 0 && data.ratingStarsTotal == 0 && data.cancellationCount == 0
         && data.averageRating == 0
@@ -97,6 +100,117 @@ service cloud.firestore {
       allow update: if isSignedIn() && validProfileEvent(userId, resource.data, request.resource.data);
     }
 
+    // Application fields and immutable versions are exclusively worker-managed.
+    function approvedAccountProfile(p) {
+      // Missing registrationStatus is a pre-application legacy profile, never a new client create.
+      return p.get('registrationStatus', 'approved') == 'approved'
+        && p.get('accountStatus', p.status) == 'active'
+        && (!('registrationStatus' in p) || p.accountType != 'driver' || operationalDriverProfile(p));
+    }
+    function approvedAccount(uid) {
+      return approvedAccountProfile(get(/databases/$(database)/documents/users/$(uid)).data);
+    }
+    function validApplicationOperation(uid, d) {
+      return isSignedIn() && d.keys().hasAll(['actorUid', 'action', 'payload', 'expectedRevision', 'reason', 'status', 'createdAt'])
+        && d.keys().hasOnly(['actorUid', 'action', 'payload', 'expectedRevision', 'reason', 'status', 'createdAt'])
+        && d.actorUid == request.auth.uid && d.status == 'pending' && d.createdAt == request.time
+        && d.expectedRevision is int && d.expectedRevision >= 0
+        && d.reason is string && d.reason.size() <= 500 && d.payload is map
+        && ((isOwner(uid) && d.action == 'submit_application'
+          && get(/databases/$(database)/documents/users/$(uid)).data.registrationStatus in ['draft', 'correction_required', 'rejected']
+          && d.payload.keys().hasAll(['profile', 'nicNumber', 'evidence', 'agreementVersion', 'agreementAccepted'])
+          && d.payload.keys().hasOnly(['profile', 'nicNumber', 'drivingLicenceNumber', 'evidence', 'agreementVersion', 'agreementAccepted'])
+          && d.payload.agreementVersion == '1.0' && d.payload.agreementAccepted == true
+          && d.payload.profile is map && d.payload.profile.keys().hasOnly(['fullName', 'phoneNumber', 'city', 'vehicleType', 'vehicleNumber', 'operatingArea', 'availableAreas'])
+          && d.payload.nicNumber is string && d.payload.nicNumber.size() <= 40
+          && (!('drivingLicenceNumber' in d.payload) || (d.payload.drivingLicenceNumber is string && d.payload.drivingLicenceNumber.size() <= 40))
+          && validEvidenceInput(d.payload.evidence))
+        || (isAdmin() && d.action in ['approve', 'reject', 'request_correction'] && d.payload.keys().size() == 0
+          && (d.action == 'approve' || d.reason.size() > 0)));
+    }
+    match /users/{uid}/application_operations/{id} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if validApplicationOperation(uid, request.resource.data);
+      allow update, delete: if false;
+    }
+    match /registration_applications/{uid} {
+      allow get: if isOwner(uid) || isAdmin();
+      allow list, write: if false;
+      match /{collection}/{id} {
+        allow read: if collection in ['submissions', 'history'] && (isOwner(uid) || isAdmin());
+        allow write: if false;
+      }
+    }
+
+    // Stage 11D: clients may request bounded operations, never apply privileged
+    // driver state themselves. The authenticated backend revalidates every action.
+    function validEvidenceInput(e) {
+      return e is map && e.keys().hasOnly(['nic', 'driving_licence', 'selfie'])
+        && (!('nic' in e) || (e.nic is string && e.nic.size() <= 300))
+        && (!('driving_licence' in e) || (e.driving_licence is string && e.driving_licence.size() <= 300))
+        && (!('selfie' in e) || (e.selfie is string && e.selfie.size() <= 300));
+    }
+    function validDriverOperation(uid, d) {
+      let p = get(/databases/$(database)/documents/users/$(uid)).data;
+      return isSignedIn()
+        && p.accountType == 'driver'
+        && (!('registrationStatus' in p) || (p.registrationStatus == 'approved'
+          && !(d.action in ['submit_identity', 'verify_identity', 'reject_identity'])))
+        && d.keys().hasAll(['action', 'payload', 'expectedRevision', 'actorUid', 'reason', 'createdAt', 'status'])
+        && d.keys().hasOnly(['action', 'payload', 'expectedRevision', 'actorUid', 'reason', 'createdAt', 'status'])
+        && d.actorUid == request.auth.uid && d.status == 'pending' && d.createdAt == request.time
+        && d.reason is string && d.reason.size() <= 500
+        && (d.action != 'reject_payment' || d.reason.size() > 0)
+        && d.expectedRevision is int && d.expectedRevision >= 0
+        && d.payload is map && d.payload.keys().hasOnly(['nicNumber', 'drivingLicenceNumber',
+          'nicDocumentPath', 'drivingLicenceDocumentPath', 'selfiePath', 'paymentId', 'claimedAmountLkr',
+          'claimedPaymentDate', 'bankTransactionReference', 'depositorName', 'slipPath', 'bankRecordReference', 'accountStatus', 'evidence'])
+        && (!('evidence' in d.payload) || (d.action == 'submit_identity' && validEvidenceInput(d.payload.evidence)))
+        && ((isOwner(uid) && d.action in ['submit_identity', 'request_payment', 'submit_payment'])
+          || (isAdmin() && d.action in ['verify_identity', 'reject_identity', 'verify_payment',
+            'reject_payment', 'activate_membership', 'set_account_status']));
+    }
+    // One server-created operational event; no client notification mutations.
+    match /admin_notifications/{notificationId} {
+      allow get: if isAdmin() && notificationId == 'founding_offer_closed';
+      allow list, create, update, delete: if false;
+    }
+    match /driver_verifications/{uid} {
+      allow get: if isOwner(uid) || isAdmin();
+      allow list, create, update, delete: if false;
+      match /submissions/{submissionId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if false;
+      }
+    }
+    match /users/{uid}/payments/{paymentId} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+    match /users/{uid}/admin_history/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /users/{uid}/driver_operations/{operationId} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if validDriverOperation(uid, request.resource.data);
+      allow update, delete: if false;
+    }
+    // identity_registry, payment registries, registration registry and
+    // system_config remain server-only under the default deny rule below.
+    function operationalDriverProfile(p) {
+      return p.accountType == 'driver' && p.get('identityVerificationStatus', '') == 'verified'
+        && p.get('registrationStatus', 'approved') == 'approved'
+        && p.get('paymentStatus', '') == 'verified' && p.get('membershipStatus', '') == 'active'
+        && p.get('accountStatus', '') == 'active'
+        && (p.get('membershipPlan', '') == 'founding_lifetime'
+          || (p.get('membershipPlan', '') == 'standard_annual'
+            && p.get('membershipValidUntil', null) is timestamp && p.membershipValidUntil > request.time));
+    }
+    function operationalDriver(uid) {
+      return operationalDriverProfile(get(/databases/$(database)/documents/users/$(uid)).data);
+    }
+
     function exactTripPostFields(data) {
       let fields = [
         'id', 'creatorId', 'creatorType', 'creatorName', 'postType',
@@ -115,7 +229,7 @@ service cloud.firestore {
     function validTripCreatorProfile(data) {
       let profilePath = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(profilePath)
-        && get(profilePath).data.status == 'active'
+        && get(profilePath).data.status == 'active' && approvedAccount(request.auth.uid)
         && get(profilePath).data.accountType in ['tourist', 'driver']
         && data.creatorType == get(profilePath).data.accountType
         && data.creatorName == get(profilePath).data.fullName;
@@ -195,9 +309,10 @@ service cloud.firestore {
 
     function hasActiveProfile() {
       let profilePath = /databases/$(database)/documents/users/$(request.auth.uid);
+      let profile = get(profilePath).data;
       return exists(profilePath)
-        && get(profilePath).data.status == 'active'
-        && get(profilePath).data.accountType in ['tourist', 'driver'];
+        && profile.status == 'active' && approvedAccountProfile(profile)
+        && profile.accountType in ['tourist', 'driver'];
     }
 
     function canListTripPost(data) {
@@ -241,6 +356,29 @@ service cloud.firestore {
         && getAfter(bidPath).data.updatedAt == request.time;
     }
 
+    // Exclusive routing by current and requested state only. A selected
+    // validator's false result is final; never try another operation's validator.
+    // Field allowlists and all authorization remain inside the full validators.
+    function validTripParentUpdate(tripId, before, after) {
+      let from = before.get('status', '');
+      let to = after.get('status', '');
+      return (from == 'accepted' && to == 'start_requested')
+        ? validLifecycleUpdate(tripId)
+        : (from == 'start_requested' && to == 'in_progress')
+          ? validLifecycleUpdate(tripId)
+          : (from == 'in_progress' && to == 'end_requested')
+            ? validLifecycleUpdate(tripId)
+            : (from == 'end_requested' && to == 'completed')
+              ? validLifecycleUpdate(tripId)
+              : (from == 'open' && to == 'accepted')
+                ? validTripAcceptance(tripId)
+                : (from == 'accepted' && to in ['open', 'cancelled'])
+                  ? validCancellation(tripId, before, after)
+                  : (from == 'open' && to == 'cancelled')
+                    ? validOpenCreatorCancellation(tripId, before, after)
+                    : false;
+    }
+
     match /trip_posts/{tripId} {
       allow create: if isSignedIn()
         && exactTripPostFields(request.resource.data)
@@ -254,10 +392,7 @@ service cloud.firestore {
       allow get: if isSignedIn() && canGetTripPost(resource.data);
       allow list: if isAdmin() || (isSignedIn() && canListTripPost(resource.data));
       allow update: if isSignedIn()
-        && (validTripAcceptance(tripId)
-          || validCancellation(tripId, resource.data, request.resource.data)
-          || validOpenCreatorCancellation(tripId, resource.data, request.resource.data)
-          || validLifecycleUpdate(tripId));
+        && validTripParentUpdate(tripId, resource.data, request.resource.data);
       allow delete: if false;
     }
 
@@ -274,7 +409,8 @@ service cloud.firestore {
     function validBidDriver(data) {
       let profilePath = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(profilePath)
-        && get(profilePath).data.status == 'active'
+        && operationalDriver(request.auth.uid)
+        && get(profilePath).data.status == 'active' && approvedAccount(request.auth.uid)
         && get(profilePath).data.accountType == 'driver'
         && data.driverId == request.auth.uid
         && data.driverName is string
@@ -322,7 +458,7 @@ service cloud.firestore {
     function hasActiveBidReadProfile(accountType) {
       let profilePath = /databases/$(database)/documents/users/$(request.auth.uid);
       return exists(profilePath)
-        && get(profilePath).data.status == 'active'
+        && get(profilePath).data.status == 'active' && approvedAccount(request.auth.uid)
         && get(profilePath).data.accountType == accountType;
     }
 
@@ -344,6 +480,7 @@ service cloud.firestore {
       let parent = get(parentPath).data;
       let afterParent = getAfter(parentPath).data;
       return hasActiveProfile()
+        && operationalDriver(bidId)
         && parent.creatorId == request.auth.uid
         && isOpenForAcceptance(parent)
         && resource.data.tripId == tripId
@@ -537,6 +674,33 @@ service cloud.firestore {
         && t.get('acceptedBidId', null) is string && t.acceptedBidId.size() > 0
         && request.auth.uid in [t.creatorId, t.acceptedDriverId]
         && t.status in ['accepted', 'start_requested', 'in_progress', 'end_requested', 'completed', 'cancelled'];
+    }
+    // Only the recipient can advance their own private read cursor. A cursor
+    // references an immutable incoming message in the current assignment.
+    match /trip_posts/{tripId}/chat_reads/{uid} {
+      function currentParticipant() {
+        return isOwner(uid) && canReadTripChat(get(/databases/$(database)/documents/trip_posts/$(tripId)).data);
+      }
+      function validCursor() {
+        let t = getAfter(/databases/$(database)/documents/trip_posts/$(tripId)).data;
+        let d = request.resource.data;
+        let m = get(/databases/$(database)/documents/trip_posts/$(tripId)/messages/$(d.lastReadMessageId)).data;
+        return canReadTripChat(t)
+          && d.keys().hasAll(['assignmentDriverId', 'lastReadMessageId', 'lastReadAt', 'updatedAt'])
+          && d.keys().hasOnly(['assignmentDriverId', 'lastReadMessageId', 'lastReadAt', 'updatedAt'])
+          && d.lastReadMessageId is string && d.lastReadMessageId.size() > 0
+          && d.lastReadAt is timestamp
+          && d.assignmentDriverId == t.acceptedDriverId
+          && m.assignmentDriverId == t.acceptedDriverId
+          && m.senderId == (uid == t.creatorId ? t.acceptedDriverId : t.creatorId)
+          && d.lastReadAt == m.createdAt && d.updatedAt == request.time;
+      }
+      allow get: if currentParticipant();
+      allow create: if currentParticipant() && validCursor();
+      allow update: if currentParticipant() && validCursor()
+        && (resource.data.assignmentDriverId != request.resource.data.assignmentDriverId
+          || request.resource.data.lastReadAt >= resource.data.lastReadAt);
+      allow list, delete: if false;
     }
     match /trip_posts/{tripId}/messages/{messageId} {
       allow list: if canReadAssignmentMessage(
@@ -746,7 +910,7 @@ service cloud.firestore {
       let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
       let fields = ['id', 'supportReference', 'userId', 'userRole', 'userName', 'contactNumber', 'category', 'subCategory',
         'tripId', 'tripReference', 'creatorId', 'acceptedDriverId', 'subject', 'message', 'status', 'createdAt', 'updatedAt', 'lastMessageAt', 'lastMessageId'];
-      return hasActiveProfile() && d.keys().hasAll(fields) && d.keys().hasOnly(fields)
+      return isSignedIn() && profile.accountType in ['tourist', 'driver'] && d.keys().hasAll(fields) && d.keys().hasOnly(fields)
         && d.id == id && d.userId == request.auth.uid && d.userRole == profile.accountType && d.userName == profile.fullName
         && d.supportReference is string && d.supportReference.matches('^SUP-[0-9]{6}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$')
         && d.contactNumber is string && d.contactNumber.size() <= 40

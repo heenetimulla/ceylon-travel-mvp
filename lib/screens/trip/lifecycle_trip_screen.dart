@@ -9,6 +9,7 @@ import '../../core/services/trip_lifecycle_service.dart';
 import '../../core/services/rating_service.dart';
 import '../../core/widgets/app_components.dart';
 import '../../core/widgets/trip_lifecycle_panel.dart';
+import '../../core/widgets/trip_chat_unread_icon.dart';
 import '../../core/widgets/trip_cancellation_button.dart';
 import '../../core/widgets/reputation_summary.dart';
 import '../../core/widgets/participant_profile_card.dart';
@@ -73,8 +74,8 @@ class _LifecycleTripScreenState extends State<LifecycleTripScreen> {
           actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
         ));
       }
-    } catch (_) {
-      if (mounted) setState(() => _error = 'Could not update the trip yet. Check your connection. The server controls confirmation deadlines; automatic updates are handled by the server.');
+    } catch (error) {
+      if (mounted) setState(() => _error = lifecycleErrorMessage(error));
     } finally { if (mounted) setState(() => _busy = false); }
   }
   @override
@@ -90,7 +91,7 @@ class _LifecycleTripScreenState extends State<LifecycleTripScreen> {
         ParticipantProfileCard(trip: trip, actor: _actor),
         if (TripChatMessage.canRead(trip, _actor))
           OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TripChatScreen(tripPost: trip))),
-            icon: const Icon(Icons.chat_bubble_outline),
+            icon: TripChatUnreadIcon(trip: trip),
             label: Text(TripChatMessage.canWrite(trip, _actor) ? 'Open Trip Chat' : 'View Chat History')),
         AppInfoCard(children: [AppRoute(pickup: trip.pickup, destination: trip.drop),
           const SizedBox(height: 16), Text(trip.dateTime), Text(trip.passengers), Text(trip.baggage),

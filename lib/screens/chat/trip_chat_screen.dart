@@ -7,13 +7,14 @@ import '../../core/models/public_profile.dart';
 import '../../core/models/trip_chat_message.dart';
 import '../../core/models/trip_post.dart';
 import '../../core/services/trip_chat_service.dart';
+import '../../core/services/trip_chat_read_service.dart';
 import '../../core/services/trip_location_service.dart';
 import '../../core/widgets/app_components.dart';
 import '../../core/widgets/profile_avatar.dart';
 
 class TripChatScreen extends StatefulWidget {
   const TripChatScreen({super.key, required this.tripPost, this.actorUid, this.tripStream,
-    this.messagesStream, this.profileStream, this.onSend, this.messageIdFactory, this.locationService});
+    this.messagesStream, this.profileStream, this.onSend, this.messageIdFactory, this.locationService, this.onRead});
   final TripPost tripPost;
   // Injectable data/operations for focused widget tests; production uses authenticated services.
   final String? actorUid;
@@ -23,11 +24,12 @@ class TripChatScreen extends StatefulWidget {
   final Future<void> Function(TripChatMessage)? onSend;
   final String Function()? messageIdFactory;
   final TripLocationService? locationService;
+  final Future<void> Function(TripPost trip, String messageId)? onRead;
   @override
   State<TripChatScreen> createState() => _TripChatScreenState();
 }
 
-class _TripChatScreenState extends State<TripChatScreen> {
+class _TripChatScreenState extends State<TripChatScreen> with WidgetsBindingObserver {
   late final _service = TripChatService();
   late final _actor = widget.actorUid ?? _service.uid;
   late final _location = widget.locationService ?? TripLocationService();
@@ -43,12 +45,44 @@ class _TripChatScreenState extends State<TripChatScreen> {
   bool _tripFailed = false, _messagesFailed = false, _messagesReady = false;
   bool _busy = false, _newMessages = false;
   int _messageGeneration = 0;
+  String? _lastAcknowledged;
+  bool _acknowledging = false;
+  late final _reads = TripChatReadService();
 
   bool get _writable => _trip != null && !_tripFailed && !_messagesFailed &&
     _messagesReady && TripChatMessage.canWrite(_trip!, _actor);
 
   @override
-  void initState() { super.initState(); _subscribeTrip(); }
+  void initState() { super.initState(); WidgetsBinding.instance.addObserver(this); _subscribeTrip(); }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) { _acknowledgeVisible(); }
+  }
+  void _acknowledgeVisible() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final trip = _trip;
+      if (!mounted || trip == null || _acknowledging || ModalRoute.of(context)?.isCurrent != true ||
+          (WidgetsBinding.instance.lifecycleState != null && WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed)) { return; }
+      final incoming = _messages.where((m) => m.isValid && m.createdAt != null && m.senderId != _actor && m.assignmentDriverId == trip.acceptedDriverId).toList();
+      if (incoming.isEmpty) { return; }
+      final latest = incoming.last;
+      final identity = '${trip.acceptedDriverId}/${latest.id}';
+      if (_lastAcknowledged == identity) { return; }
+      _acknowledging = true;
+      try {
+        if (widget.onRead != null) { await widget.onRead!(trip, latest.id); }
+        else if (widget.messagesStream == null) { await _reads.markRead(trip, latest.id); }
+        if (mounted && _trip?.acceptedDriverId == trip.acceptedDriverId) { _lastAcknowledged = identity; }
+      } catch (_) {
+        if (mounted) { setState(() => _actionError = 'Messages are visible, but read status could not be saved. Reopen this chat to retry.'); }
+      } finally {
+        _acknowledging = false;
+        if (mounted && _lastAcknowledged == identity && _messages.isNotEmpty && _messages.last.id != latest.id) {
+          _acknowledgeVisible();
+        }
+      }
+    });
+  }
   void _subscribeTrip() {
     _tripSubscription?.cancel();
     try {
@@ -100,6 +134,7 @@ class _TripChatScreenState extends State<TripChatScreen> {
         if (changed && !latest) _newMessages = true;
       });
       if (latest) _showLatest();
+      _acknowledgeVisible();
     }, onError: (_) {
       if (mounted && generation == _messageGeneration) {
         setState(() { _messagesFailed = true; _messages = []; });
@@ -195,6 +230,7 @@ class _TripChatScreenState extends State<TripChatScreen> {
   }
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tripSubscription?.cancel(); _messageSubscription?.cancel();
     _text.dispose(); _scroll.dispose(); super.dispose();
   }

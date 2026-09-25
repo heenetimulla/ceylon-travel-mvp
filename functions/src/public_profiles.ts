@@ -7,8 +7,9 @@ export function publicProfile(uid: string, user: DocumentData, reputation?: Docu
     uid,
     fullName: typeof user.fullName === "string" ? user.fullName.trim() : "",
     profilePhotoPath: typeof user.profilePhotoPath === "string" ? user.profilePhotoPath : null,
-    verificationStatus: user.verification?.status === "approved" || user.verification?.status === "verified"
-      ? "verified" : "not_verified",
+    verificationStatus: user.identityVerificationStatus != null
+      ? (user.identityVerificationStatus === "verified" ? "verified" : "not_verified")
+      : (user.verification?.status === "approved" || user.verification?.status === "verified" ? "verified" : "not_verified"),
     completedTripsCount: metrics.completedTripsCount ?? 0,
     averageRating: metrics.averageRating ?? 0,
     ratingsCount: metrics.ratingsCount ?? 0,
@@ -23,7 +24,8 @@ export async function syncPublicProfile(db: Firestore, uid: string): Promise<voi
     const user = await tx.get(db.collection("users").doc(uid));
     const reputation = await tx.get(db.collection("user_reputation").doc(uid));
     const target = db.collection("user_public_profiles").doc(uid);
-    if (!user.exists) { tx.delete(target); return; }
+    if (!user.exists || (user.data()!.registrationStatus != null &&
+        (user.data()!.registrationStatus !== "approved" || user.data()!.accountStatus !== "active"))) { tx.delete(target); return; }
     tx.set(target, publicProfile(uid, user.data()!, reputation.data()));
   });
 }

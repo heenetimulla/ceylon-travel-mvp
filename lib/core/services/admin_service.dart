@@ -72,13 +72,24 @@ class AdminService {
   Stream<AdminAccess> watchAccess() => Stream<AdminAccess>.multi((controller) {
     var generation = 0;
     var cancelled = false;
+    String? authorizedUid;
     final subscription = _auth.idTokenChanges().listen((user) async {
       final current = ++generation;
-      controller.add(const AdminAccess(AdminAccessStatus.loading));
+      // A same-user token refresh must not unmount the gate's protected child.
+      // Retain only an already verified session while the bounded claim read is
+      // pending. Initial load, logout and user switches still clear access.
+      if (user == null || user.uid != authorizedUid) {
+        authorizedUid = null;
+        controller.add(const AdminAccess(AdminAccessStatus.loading));
+      }
       final access = user == null ? const AdminAccess(AdminAccessStatus.signedOut) : await readAccess();
-      if (!cancelled && current == generation) controller.add(access);
+      if (!cancelled && current == generation) {
+        authorizedUid = access.status == AdminAccessStatus.allowed ? access.uid : null;
+        controller.add(access);
+      }
     }, onError: (Object error) {
       generation++;
+      authorizedUid = null;
       if (!cancelled) controller.add(const AdminAccess(AdminAccessStatus.error));
     });
     controller.onCancel = () async {

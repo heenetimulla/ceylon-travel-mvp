@@ -19,6 +19,7 @@ import '../trip/creator_trip_posts_screen.dart';
 import '../trip/trip_details_screen.dart';
 import 'accepted_driver_trips_screen.dart';
 import 'submit_bid_screen.dart';
+import 'driver_registration_status_screen.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key, this.postsStream, this.loadProfile});
@@ -87,6 +88,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         padding: appPagePadding(context),
         children: [
           UserIdentityHeader(loadProfile: widget.loadProfile),
+          Card(child: ListTile(
+            leading: const Icon(Icons.verified_user_outlined),
+            title: const Text('Driver verification & membership'),
+            subtitle: const Text('Submit your identity details and check your membership.'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              final uid = FirebaseAuth.instance.currentUser?.uid;
+              if (uid == null) { return; }
+              Navigator.push(context, MaterialPageRoute<void>(builder: (_) => DriverRegistrationStatusScreen(uid: uid)));
+            },
+          )),
           const SizedBox(height: 20),
           const Text('Your driver workspace', style: AppTextStyles.section),
           const SizedBox(height: 8),

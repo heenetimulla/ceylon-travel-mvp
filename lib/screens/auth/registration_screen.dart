@@ -7,17 +7,17 @@ import '../../core/enums/account_type.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/bid_service.dart';
 import '../../core/validation/registration_validation.dart';
-import '../../core/widgets/upload_placeholder.dart';
-import '../driver/driver_home_screen.dart';
-import '../tourist/tourist_home_screen.dart';
+import 'registration_application_screen.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({
     super.key,
     this.initialAccountType = AccountType.tourist,
+    this.resumeAuthenticated = false,
   });
 
   final AccountType initialAccountType;
+  final bool resumeAuthenticated;
 
   @override
   State<RegistrationScreen> createState() => _RegistrationScreenState();
@@ -38,6 +38,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       TextEditingController();
   AuthService? _authService;
   FirebaseFirestore? _firestore;
+  String? _createdUid;
 
   late AccountType selectedAccountType;
   bool isRegistering = false;
@@ -51,6 +52,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.resumeAuthenticated) {
+      _createdUid = authService.currentUser?.uid;
+      emailController.text = authService.currentUser?.email ?? '';
+    }
     selectedAccountType = widget.initialAccountType == AccountType.driver
         ? AccountType.driver
         : AccountType.tourist;
@@ -90,24 +95,29 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     });
 
     try {
-      final credential = await authService.registerWithEmailAndPassword(
-        email: emailController.text,
-        password: passwordController.text,
-      );
-      final String? uid = credential.user?.uid;
+      if (_createdUid == null) {
+        final credential = await authService.registerWithEmailAndPassword(
+          email: emailController.text,
+          password: passwordController.text,
+        );
+        _createdUid = credential.user?.uid;
+      }
+      final String? uid = _createdUid;
 
-      if (uid == null) {
+      if (uid == null || authService.currentUser?.uid != uid) {
         _showRegistrationError(
           'Registration could not be completed. Please try again.',
         );
         return;
       }
 
-      await firestore.collection('users').doc(uid).set(_buildUserDocument(uid));
+      final ref = firestore.collection('users').doc(uid);
+      final existing = await ref.get(const GetOptions(source: Source.server));
+      if (!existing.exists) { await ref.set(_buildUserDocument(uid)); }
 
       if (!mounted) return;
 
-      _openHomeScreen();
+      _openApplication(uid);
     } on AuthServiceException catch (exception) {
       _showRegistrationError(exception.message);
     } on FirebaseException {
@@ -137,13 +147,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     if (!_isValidEmail(emailController.text.trim())) {
       return 'Enter a valid email address.';
     }
-    if (_isBlank(passwordController)) {
+    if (_createdUid == null && _isBlank(passwordController)) {
       return 'Password is required.';
     }
-    if (_isBlank(confirmPasswordController)) {
+    if (_createdUid == null && _isBlank(confirmPasswordController)) {
       return 'Confirm password is required.';
     }
-    if (passwordController.text != confirmPasswordController.text) {
+    if (_createdUid == null && passwordController.text != confirmPasswordController.text) {
       return 'Passwords do not match.';
     }
     if (_isBlank(cityController)) {
@@ -180,12 +190,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     final Map<String, Object?> userDocument = {
       'uid': uid,
       'fullName': fullNameController.text.trim(),
-      'email': emailController.text.trim(),
+      'email': authService.currentUser?.email ?? emailController.text.trim(),
       'phoneNumber': phoneController.text.trim(),
       'city': cityController.text.trim(),
       'accountType': isDriver ? 'driver' : 'tourist',
       'profilePhotoPath': null,
       'status': 'active',
+      'registrationStatus': 'draft',
+      'accountStatus': 'pending_approval',
+      'applicationRevision': 0,
       'averageRating': 0,
       'ratingsCount': 0,
       'ratingStarsTotal': 0,
@@ -224,15 +237,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _openHomeScreen() {
-    final Widget destination = isDriver
-        ? const DriverHomeScreen()
-        : const TouristHomeScreen();
-
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => destination),
-    );
+  void _openApplication(String uid) {
+    passwordController.clear(); confirmPasswordController.clear();
+    Navigator.pushReplacement(context, MaterialPageRoute<void>(builder: (_) => RegistrationApplicationScreen(uid: uid)));
   }
 
   @override
@@ -251,12 +258,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   children: [
                     const AppBrandHeader(),
                     const Text(
-                      'Create your account',
+                      'Start your registration application',
                       style: AppTextStyles.title,
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Plan your journey or offer your driving services. Choose your account type below.',
+                      'Choose your account type and enter your details. Next, upload identity documents and accept the guidelines. Creating login credentials does not approve your account.',
                       style: AppTextStyles.secondary,
                     ),
                     const SizedBox(height: 22),
@@ -279,6 +286,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: emailController,
+                      enabled: _createdUid == null,
                       keyboardType: TextInputType.emailAddress,
                       decoration: const InputDecoration(
                         labelText: 'Email',
@@ -286,7 +294,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
+                    if (_createdUid == null) TextField(
                       controller: passwordController,
                       obscureText: true,
                       decoration: const InputDecoration(
@@ -295,7 +303,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
+                    if (_createdUid == null) TextField(
                       controller: confirmPasswordController,
                       obscureText: true,
                       decoration: const InputDecoration(
@@ -381,18 +389,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           prefixIcon: Icon(Icons.route_outlined),
                         ),
                       ),
-                      const SizedBox(height: 14),
-                      const UploadPlaceholder(
-                        title: 'Identity document',
-                        subtitle: 'Document upload will be available soon.',
-                        icon: Icons.badge_outlined,
-                      ),
-                      const SizedBox(height: 12),
-                      const UploadPlaceholder(
-                        title: 'Photo verification',
-                        subtitle: 'Photo verification will be available soon.',
-                        icon: Icons.camera_alt_outlined,
-                      ),
                     ],
                     const SizedBox(height: 22),
                     SizedBox(
@@ -408,7 +404,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text('Create Account'),
+                              : const Text('Continue to identity & documents'),
                       ),
                     ),
                   ],

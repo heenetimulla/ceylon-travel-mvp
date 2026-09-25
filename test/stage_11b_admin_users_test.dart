@@ -344,8 +344,11 @@ void main() {
         await tester.ensureVisible(find.text(label));
         expect(find.text(label), findsOneWidget);
       }
+      // This legacy Tourist has no registrationStatus/accountStatus, so its
+      // stored status 'active' retains the uppercase ACTIVE display label.
+      expect(_tourist.registrationStatus, isNull);
       for (final value in ['a', 'Tourist/User', 'amal@example.com', '+94 77 123 4567',
-        'Kandy', 'active', '12', '2', '14.3%', '4.5', '8', 'verified', 'profiles/a/photo.jpg']) {
+        'Kandy', 'ACTIVE', '12', '2', '14.3%', '4.5', '8', 'verified', 'profiles/a/photo.jpg']) {
         expect(find.text(value), findsOneWidget);
       }
       // Assert each actual date value beside its label, including the year and

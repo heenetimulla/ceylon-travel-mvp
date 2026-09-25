@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:taxi_app/core/services/trip_chat_read_service.dart';
+import 'package:taxi_app/core/widgets/trip_chat_unread_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
@@ -58,6 +61,7 @@ Future<void> withTripUpdates(WidgetTester tester,
 Future<void> showChat(WidgetTester tester, {String actor = 'creator-1', String status = 'accepted',
   List<TripChatMessage> messages = const [], Stream<TripPost>? trips,
   Stream<List<TripChatMessage>>? messagesStream,
+  Future<void> Function(TripPost, String)? onRead,
   Future<void> Function(TripChatMessage)? onSend, TripLocationService? location}) async {
   var id = 0;
   await tester.pumpWidget(MaterialApp(home: TripChatScreen(tripPost: chatTrip(status), actorUid: actor,
@@ -68,11 +72,59 @@ Future<void> showChat(WidgetTester tester, {String actor = 'creator-1', String s
       controller.add(PublicProfile(uid: actor == 'creator-1' ? 'driver-1' : 'creator-1', fullName: 'Other Participant'));
       controller.close();
     }),
-    messageIdFactory: () => 'outgoing-${id++}', onSend: onSend ?? (_) async {}, locationService: location)));
+    messageIdFactory: () => 'outgoing-${id++}', onSend: onSend ?? (_) async {}, locationService: location, onRead: onRead)));
   await pumpChat(tester);
 }
 
 void main() {
+  test('Unread ignores own messages and other assignments, then clears at the read cursor', () {
+    final stamp = Timestamp.fromDate(DateTime.utc(2026, 9, 24));
+    final incoming = <String, dynamic>{'senderId': 'creator-1', 'assignmentDriverId': 'driver-1', 'createdAt': stamp};
+    expect(TripChatReadService.isUnread(incoming, null, 'driver-1', 'driver-1'), isTrue);
+    expect(TripChatReadService.isUnread({...incoming, 'senderId': 'driver-1'}, null, 'driver-1', 'driver-1'), isFalse);
+    expect(TripChatReadService.isUnread(incoming, null, 'driver-2', 'driver-2'), isFalse);
+    final cursor = {'assignmentDriverId': 'driver-1', 'lastReadAt': stamp};
+    expect(TripChatReadService.isUnread(incoming, cursor, 'driver-1', 'driver-1'), isFalse);
+    expect(TripChatReadService.isUnread({...incoming, 'createdAt': Timestamp(stamp.seconds + 1, 0)}, cursor, 'driver-1', 'driver-1'), isTrue);
+  });
+  testWidgets('Chat entry shows red unread badge and clears after persisted read update', (tester) async {
+    final updates = StreamController<bool>.broadcast(sync: true);
+    final stamp = Timestamp.fromDate(DateTime.utc(2026, 9, 24));
+    final incoming = <String, dynamic>{'senderId': 'creator-1',
+      'assignmentDriverId': 'driver-1', 'createdAt': stamp};
+    try {
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: TripChatUnreadIcon(trip: chatTrip('accepted'), unreadStream: updates.stream))));
+      updates.add(TripChatReadService.isUnread(incoming, null, 'driver-1', 'driver-1'));
+      await pumpChat(tester);
+      expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isTrue);
+      expect(tester.widget<Badge>(find.byType(Badge)).backgroundColor, Colors.red);
+      // Simulate the persisted recipient cursor arriving from another snapshot.
+      final persistedRead = {'assignmentDriverId': 'driver-1', 'lastReadAt': stamp};
+      updates.add(TripChatReadService.isUnread(incoming, persistedRead, 'driver-1', 'driver-1'));
+      await pumpChat(tester);
+      expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isFalse);
+    } finally {
+      await tester.pumpWidget(const SizedBox());
+      final closed = updates.close();
+      // close() completes through fake-async microtasks, even without a listener.
+      // Drain those before awaiting it; no Firestore or settle loop is involved.
+      await pumpChat(tester);
+      await closed;
+    }
+  });
+  testWidgets('Opening chat acknowledges incoming messages but not own messages', (tester) async {
+    final read = <String>[];
+    await showChat(tester, actor: 'driver-1', messages: [textMessage('incoming', 'creator-1', 'Hello'),
+      textMessage('own', 'driver-1', 'Hi')], onRead: (_, id) async { read.add(id); });
+    await pumpChat(tester);
+    expect(read, ['incoming']);
+    await tester.pumpWidget(const SizedBox());
+    read.clear();
+    await showChat(tester, actor: 'driver-1', messages: [textMessage('own', 'driver-1', 'Hi')],
+      onRead: (_, id) async { read.add(id); });
+    await pumpChat(tester); expect(read, isEmpty);
+  });
+
   // Flutter already selects Android under FLUTTER_TEST. Do not override a debug
   // global in setUp: widget-test invariants run before package:test tearDown.
   test('Text and location parsing preserves schema and safely handles pending/invalid data', () {

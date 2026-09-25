@@ -1,3 +1,4 @@
+import 'registration_application_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/trip_chat_message.dart';
@@ -51,6 +52,7 @@ class TripChatService {
     // Transactions intentionally fail offline instead of queueing an unknown send.
     // The UI retains this ID/payload for an explicit retry after an uncertain result.
     await _db.runTransaction((tx) async {
+      await requireOperationalAccount(_db, actor, transaction: tx);
       final tripDoc = await tx.get(parent);
       if (!tripDoc.exists) throw StateError('This trip is unavailable.');
       final trip = TripPost.fromFirestore(tripDoc);

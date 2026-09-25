@@ -123,7 +123,7 @@ void main() {
     await tester.tap(find.text('Register'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Create your account'), findsOneWidget);
+    expect(find.text('Start your registration application'), findsOneWidget);
     expect(find.text('Tourist/User'), findsOneWidget);
     expect(find.text('Driver'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
@@ -159,8 +159,8 @@ void main() {
     expect(find.text('Vehicle number'), findsOneWidget);
     expect(find.text('Operating area'), findsOneWidget);
     expect(find.text('Available areas'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Identity document'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Photo verification'), findsOneWidget);
+    expect(find.text('Continue to identity & documents'), findsOneWidget);
+    expect(find.textContaining('Creating login credentials does not approve your account.'), findsOneWidget);
 
     await tester.enterText(
       find.widgetWithText(TextField, 'Full name'),

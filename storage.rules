@@ -1,0 +1,80 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /driver_evidence/{uid}/{revision}/{kind}/{file} {
+      function applicant() {
+        let p = firestore.get(/databases/(default)/documents/users/$(uid)).data;
+        return request.auth != null && request.auth.uid == uid && p.accountType == 'driver' && !('registrationStatus' in p)
+          && p.get('driverAdminRevision', 0) == int(revision)
+          && p.get('identityVerificationStatus', 'pending') != 'verified';
+      }
+      function validImage() {
+        let m = request.resource.metadata;
+        let edge = kind == 'selfie' ? 1600 : 2000;
+        return kind in ['nic', 'driving_licence', 'selfie']
+          && revision.matches('^[0-9]+$') && file.matches('^[a-f0-9]{32}[.]jpg$')
+          && request.resource.contentType == 'image/jpeg'
+          && request.resource.size > 0
+          && request.resource.size <= (kind == 'selfie' ? 1572864 : 2097152)
+          && m.keys().hasAll(['ownerUid', 'applicationRevision', 'evidenceType', 'width', 'height'])
+          && m.keys().hasOnly(['ownerUid', 'applicationRevision', 'evidenceType', 'width', 'height'])
+          && m.ownerUid == uid && m.applicationRevision == revision && m.evidenceType == kind
+          && int(m.width) >= 400 && int(m.width) <= edge
+          && int(m.height) >= 400 && int(m.height) <= edge;
+      }
+      allow get: if request.auth != null && (request.auth.uid == uid || request.auth.token.admin == true);
+      // Append-only objects. Replacement uses a fresh random name; historical evidence cannot be edited/deleted.
+      allow write: if request.resource != null && resource == null && applicant() && validImage();
+      allow list: if false;
+    }
+    match /registration_evidence/{uid}/{revision}/{kind}/{file} {
+      function applicant() {
+        let p = firestore.get(/databases/(default)/documents/users/$(uid)).data;
+        return request.auth != null && request.auth.uid == uid && p.accountType in ['tourist', 'driver'] && (p.accountType == 'driver' || kind != 'driving_licence')
+          && p.get('applicationRevision', -1) + 1 == int(revision)
+          && p.get('registrationStatus', '') in ['draft', 'correction_required', 'rejected'];
+      }
+      function validImage() {
+        let m = request.resource.metadata;
+        let edge = kind == 'selfie' ? 1600 : 2000;
+        return kind in ['nic', 'driving_licence', 'selfie']
+          && revision.matches('^[0-9]+$') && file.matches('^[a-f0-9]{32}[.]jpg$')
+          && request.resource.contentType == 'image/jpeg'
+          && request.resource.size > 0
+          && request.resource.size <= (kind == 'selfie' ? 1572864 : 2097152)
+          && m.keys().hasAll(['ownerUid', 'applicationRevision', 'evidenceType', 'width', 'height'])
+          && m.keys().hasOnly(['ownerUid', 'applicationRevision', 'evidenceType', 'width', 'height'])
+          && m.ownerUid == uid && m.applicationRevision == revision && m.evidenceType == kind
+          && int(m.width) >= 400 && int(m.width) <= edge
+          && int(m.height) >= 400 && int(m.height) <= edge;
+      }
+      allow get: if request.auth != null && (request.auth.uid == uid || request.auth.token.admin == true);
+      // Append-only objects. Replacement uses a fresh random name; historical evidence cannot be edited/deleted.
+      allow write: if request.resource != null && resource == null && applicant() && validImage();
+      allow list: if false;
+    }
+    match /payment_evidence/{uid}/{paymentId}/{file} {
+      function applicant() {
+        let p = firestore.get(/databases/(default)/documents/users/$(uid)).data;
+        let payment = firestore.get(/databases/(default)/documents/users/$(uid)/payments/$(paymentId)).data;
+        return request.auth != null && request.auth.uid == uid && p.accountType == 'driver'
+          && p.get('registrationStatus', 'approved') == 'approved'
+          && p.get('currentRegistrationPaymentId', '') == paymentId
+          && payment.paymentType == 'registration' && payment.status == 'pending' && payment.claimSubmitted == false;
+      }
+      function validImage() {
+        let m = request.resource.metadata;
+        return paymentId.matches('^[A-Za-z0-9_-]{1,128}$') && file.matches('^[a-f0-9]{32}[.]jpg$')
+          && request.resource.contentType == 'image/jpeg' && request.resource.size > 0 && request.resource.size <= 2097152
+          && m.keys().hasAll(['ownerUid', 'paymentId', 'evidenceType', 'width', 'height'])
+          && m.keys().hasOnly(['ownerUid', 'paymentId', 'evidenceType', 'width', 'height'])
+          && m.ownerUid == uid && m.paymentId == paymentId && m.evidenceType == 'payment_slip'
+          && int(m.width) >= 400 && int(m.height) >= 400 && int(m.width) <= 2000 && int(m.height) <= 2000;
+      }
+      allow get: if request.auth != null && (request.auth.uid == uid || request.auth.token.get('admin', false) == true);
+      allow write: if request.resource != null && resource == null && applicant() && validImage();
+      allow list: if false;
+    }
+    match /{other=**} { allow read, write: if false; }
+  }
+}

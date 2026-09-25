@@ -1,8 +1,31 @@
+import 'registration_application_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/trip_post.dart';
 import '../models/trip_lifecycle.dart';
 import '../models/user_reputation.dart';
+
+String lifecycleErrorMessage(Object error) {
+  if (error is StateError) { return error.message; }
+  if (error is FirebaseException) {
+    switch (error.code) {
+      case 'permission-denied':
+        return 'The server denied this trip action. Refresh the trip and check that you are still its assigned participant and your account is active. Contact support if this continues.';
+      case 'unauthenticated':
+        return 'Your session expired. Sign in again before updating this trip.';
+      case 'unavailable':
+      case 'deadline-exceeded':
+        return 'Could not reach the trip server. Check your connection, refresh the trip and retry.';
+      case 'aborted':
+      case 'failed-precondition':
+        return 'The trip changed or its confirmation window expired. Refresh the trip before trying again.';
+      default:
+        return 'Could not confirm this trip action (${error.code}). Refresh the trip or contact support.';
+    }
+  }
+  if (error is FormatException) { return 'Trip information is incomplete. Refresh the trip or contact support.'; }
+  return 'Could not confirm the trip action. Refresh the trip and contact support if this continues.';
+}
 
 class TripLifecycleService {
   TripLifecycleService({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
@@ -33,6 +56,7 @@ class TripLifecycleService {
     // Retry requestStart/requestEnd after interruption to refresh a stale anchor.
     // Publishing the parent request triggers backend scheduling; no client auto writer.
     await _db.runTransaction((tx) async {
+      await requireOperationalAccount(_db, actor, transaction: tx);
       final trip = TripPost.fromFirestore(await tx.get(ref));
 
       validateLifecycle(trip, actor, start ? LifecycleAction.requestStart : LifecycleAction.requestEnd);
@@ -40,8 +64,12 @@ class TripLifecycleService {
       tx.set(anchor, {'requestedBy': actor, 'createdAt': FieldValue.serverTimestamp()});
     });
     await _db.runTransaction((tx) async {
+      await requireOperationalAccount(_db, actor, transaction: tx);
       final trip = TripPost.fromFirestore(await tx.get(ref));
-      final data = (await tx.get(anchor)).data()!;
+      final data = (await tx.get(anchor)).data();
+      if (data == null || data['createdAt'] is! Timestamp || data['requestedBy'] != actor) {
+        throw StateError('The server start/end request was not confirmed. Refresh the trip and retry.');
+      }
       validateLifecycle(trip, actor, start ? LifecycleAction.requestStart : LifecycleAction.requestEnd);
       if (uid != actor) throw StateError('Your session changed.');
       final at = data['createdAt'] as Timestamp;
@@ -60,6 +88,7 @@ class TripLifecycleService {
     final actor = uid;
     final ref = _db.collection('trip_posts').doc(id);
     await _db.runTransaction((tx) async {
+      await requireOperationalAccount(_db, actor, transaction: tx);
       final trip = TripPost.fromFirestore(await tx.get(ref));
       if (actor != trip.creatorId && actor != trip.acceptedDriverId) throw StateError('Not a trip participant.');
       validateLifecycle(trip, actor, action);

@@ -8,6 +8,7 @@ import 'package:taxi_app/core/services/rating_service.dart';
 import 'package:taxi_app/core/services/support_service.dart';
 import 'package:taxi_app/core/services/trip_cancellation_service.dart';
 import 'package:taxi_app/core/services/trip_chat_service.dart';
+import 'package:taxi_app/core/services/trip_chat_read_service.dart';
 import 'package:taxi_app/core/models/trip_post.dart';
 import 'accepted_driver_trips_widget_test.dart' show acceptedTrip;
 
@@ -41,13 +42,37 @@ void main() {
   _Store store() {
     final db = _Store();
     db.docs['trip_posts/trip-1'] = acceptedTrip().toFirestore()..['tripReference'] = 'CT-260910-ABC234';
-    for (final uid in ['creator-1', 'driver-1']) {
+    for (final uid in ['creator-1', 'driver-1', 'driver-2']) {
       db.docs['users/$uid'] = {'status':'active','accountType':'driver','fullName':uid,'phoneNumber':'+94771234567',
         'completedTripsCount':0,'ratingsCount':0,'averageRating':0.0,'ratingStarsTotal':0};
     }
     return db;
   }
   TripLifecycleService lifecycle(_Store db, String uid) => TripLifecycleService(firebaseAuth: _Auth(uid), firestore: db);
+  test('New pending applicants cannot use lifecycle, operational chat or ratings but can contact support', () async {
+    for (final state in ['draft', 'pending_review', 'correction_required', 'rejected']) {
+      final db = store();
+      db.docs['users/creator-1']!.addAll({'accountType': 'tourist', 'registrationStatus': state, 'accountStatus': 'pending_approval'});
+      db.docs['trip_posts/trip-1']!['status'] = 'start_requested';
+      await expectLater(lifecycle(db, 'creator-1').confirmStart('trip-1'), throwsStateError);
+      await expectLater(TripChatService(firebaseAuth: _Auth('creator-1'), firestore: db)
+        .sendText(tripId: 'trip-1', messageId: 'pending', text: 'Hello'), throwsStateError);
+      db.docs['trip_posts/trip-1']!['status'] = 'completed';
+      await expectLater(RatingService(firebaseAuth: _Auth('creator-1'), firestore: db)
+        .submit(tripId: 'trip-1', stars: 5, comment: 'Hello'), throwsStateError);
+      expect(db.writes, isEmpty);
+      final id = await SupportService(firebaseAuth: _Auth('creator-1'), firestore: db)
+        .create(category: 'question', contactNumber: '+94771234567', subject: 'Application', message: 'Please help');
+      expect(db.docs['support_requests/$id']!['userId'], 'creator-1');
+    }
+  });
+  test('Approved active Tourist retains operational chat access', () async {
+    final db = store();
+    db.docs['users/creator-1']!.addAll({'accountType': 'tourist', 'registrationStatus': 'approved', 'accountStatus': 'active'});
+    await TripChatService(firebaseAuth: _Auth('creator-1'), firestore: db)
+      .sendText(tripId: 'trip-1', messageId: 'approved', text: 'Hello');
+    expect(db.docs['trip_posts/trip-1/messages/approved']!['senderId'], 'creator-1');
+  });
   test('Start/end lifecycle uses server anchors, permissions and exact deadlines', () async {
     final db = store();
     await expectLater(lifecycle(db,'driver-1').requestEnd('trip-1'), throwsStateError);
@@ -76,6 +101,54 @@ void main() {
     await expectLater(lifecycle(db,'creator-1').confirmEnd('trip-1'), throwsStateError);
     expect(db.writes.length,writes);
     expect(t['tripReference'],'CT-260910-ABC234');
+  });
+  test('Approved operational driver can start a future scheduled accepted trip', () async {
+    final db = store();
+    db.docs['users/driver-1']!.addAll({'registrationStatus': 'approved', 'accountStatus': 'active',
+      'identityVerificationStatus': 'verified', 'paymentStatus': 'verified', 'membershipStatus': 'active',
+      'membershipPlan': 'founding_lifetime'});
+    db.docs['trip_posts/trip-1']!['scheduledAt'] = Timestamp.fromDate(db.now.add(const Duration(hours: 1)));
+    await expectLater(lifecycle(db, 'driver-2').requestStart('trip-1'), throwsStateError);
+    await lifecycle(db, 'driver-1').requestStart('trip-1');
+    expect(db.docs['trip_posts/trip-1']!['status'], 'start_requested');
+  });
+  test('Incomplete driver and unaccepted trips cannot request start', () async {
+    final db = store();
+    db.docs['users/driver-1']!.addAll({'registrationStatus': 'approved', 'accountStatus': 'active',
+      'identityVerificationStatus': 'verified', 'paymentStatus': 'pending', 'membershipStatus': 'pending'});
+    await expectLater(lifecycle(db, 'driver-1').requestStart('trip-1'), throwsStateError);
+    expect(db.writes, isEmpty);
+    db.docs['users/driver-1']!.remove('registrationStatus');
+    db.docs['trip_posts/trip-1']!['status'] = 'open';
+    await expectLater(lifecycle(db, 'driver-1').requestStart('trip-1'), throwsStateError);
+    expect(db.writes, isEmpty);
+  });
+  test('Lifecycle business and permission errors are not described as connection failures', () {
+    expect(lifecycleErrorMessage(StateError('Only the accepted driver can start.')), 'Only the accepted driver can start.');
+    final denied = lifecycleErrorMessage(FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied'));
+    expect(denied, contains('server denied')); expect(denied, isNot(contains('connection')));
+    expect(lifecycleErrorMessage(FirebaseException(plugin: 'cloud_firestore', code: 'unavailable')), contains('connection'));
+  });
+  test('Read cursor acknowledges only incoming current-assignment messages and never regresses', () async {
+    final db = store();
+    final creator = TripChatService(firebaseAuth: _Auth('creator-1'), firestore: db);
+    final reads = TripChatReadService(auth: _Auth('driver-1'), firestore: db);
+    final trip = TripPost.fromMap('trip-1', db.docs['trip_posts/trip-1']!);
+    await creator.sendText(tripId: 'trip-1', messageId: 'one', text: 'Hello');
+    await reads.markRead(trip, 'one');
+    final cursor = db.docs['trip_posts/trip-1/chat_reads/driver-1']!;
+    expect(cursor['lastReadMessageId'], 'one');
+    expect(cursor['lastReadAt'], db.docs['trip_posts/trip-1/messages/one']!['createdAt']);
+    db.now = db.now.add(const Duration(seconds: 1));
+    await creator.sendText(tripId: 'trip-1', messageId: 'two', text: 'Are you here?');
+    await reads.markRead(trip, 'two');
+    final count = db.writes.length;
+    await reads.markRead(trip, 'one');
+    expect(db.writes.length, count);
+    expect(db.docs['trip_posts/trip-1/chat_reads/driver-1']!['lastReadMessageId'], 'two');
+    await expectLater(TripChatReadService(auth: _Auth('creator-1'), firestore: db).markRead(trip, 'two'), throwsStateError);
+    db.docs['trip_posts/trip-1']!['acceptedDriverId'] = 'driver-2';
+    await expectLater(reads.markRead(trip, 'two'), throwsStateError);
   });
   // Automatic deadline/retry coverage now lives in functions/test/lifecycle.test.ts.
   test('Progressed lifecycle rejects both Stage 9 cancellation entry points', () async {

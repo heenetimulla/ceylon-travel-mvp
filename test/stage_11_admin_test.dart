@@ -8,6 +8,7 @@ import 'package:taxi_app/core/models/support_request.dart';
 import 'package:taxi_app/core/services/admin_service.dart';
 import 'package:taxi_app/core/services/admin_data_source.dart';
 import 'package:taxi_app/core/widgets/admin_stat_card.dart';
+import 'package:taxi_app/core/widgets/admin_access_gate.dart';
 import 'package:taxi_app/screens/admin/admin_dashboard_screen.dart';
 
 const stats = AdminDashboardStats(totalUsers: 6, totalDrivers: 3, totalTourists: 2,
@@ -23,6 +24,93 @@ Future<void> pumpAdmin(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('Admin gate preserves mounted child through same-user token refresh', (tester) async {
+    final changes = StreamController<User?>.broadcast(sync: true);
+    final auth = _Auth()..changes = changes.stream;
+    final service = AdminService(firebaseAuth: auth);
+    final refreshed = Completer<IdTokenResult>();
+    final childKey = GlobalKey();
+    try {
+      await tester.pumpWidget(MaterialApp(home: AdminAccessGate(service: service,
+        builder: (_, uid) => Text('Protected $uid', key: childKey))));
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(childKey.currentContext, isNull);
+
+      auth.currentUser = _User('admin', {'admin': true});
+      changes.add(auth.currentUser);
+      await pumpAdmin(tester);
+      expect(find.text('Protected admin'), findsOneWidget);
+      final originalElement = childKey.currentContext!;
+
+      // Use the real production watcher; only Firebase token completion is fake.
+      auth.currentUser = _User('admin', {'admin': true}, token: refreshed.future);
+      changes.add(auth.currentUser);
+      await pumpAdmin(tester);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(identical(childKey.currentContext, originalElement), isTrue);
+      expect(originalElement.mounted, isTrue);
+
+      refreshed.complete(_Token({'admin': true}));
+      await pumpAdmin(tester);
+      expect(find.text('Protected admin'), findsOneWidget);
+      expect(identical(childKey.currentContext, originalElement), isTrue);
+      expect(originalElement.mounted, isTrue);
+    } finally {
+      if (!refreshed.isCompleted) refreshed.complete(_Token({}));
+      await tester.pumpWidget(const SizedBox());
+      await changes.close();
+    }
+  });
+
+  for (final outcome in ['revoked', 'logout', 'switch', 'error']) {
+    testWidgets('Admin gate removes protected child on $outcome during refresh', (tester) async {
+      final changes = StreamController<User?>.broadcast(sync: true);
+      final auth = _Auth()..changes = changes.stream;
+      final service = AdminService(firebaseAuth: auth);
+      final refreshed = Completer<IdTokenResult>();
+      final childKey = GlobalKey();
+      try {
+        await tester.pumpWidget(MaterialApp(home: AdminAccessGate(service: service,
+          builder: (_, uid) => Text('Protected $uid', key: childKey))));
+        auth.currentUser = _User('admin', {'admin': true});
+        changes.add(auth.currentUser);
+        await pumpAdmin(tester);
+        final originalElement = childKey.currentContext!;
+
+        auth.currentUser = _User('admin', {'admin': true}, token: refreshed.future);
+        changes.add(auth.currentUser);
+        await pumpAdmin(tester);
+        expect(identical(childKey.currentContext, originalElement), isTrue);
+
+        if (outcome == 'logout' || outcome == 'switch') {
+          auth.currentUser = outcome == 'logout' ? null : _User('other', {'supportAdmin': true});
+          changes.add(auth.currentUser);
+          await pumpAdmin(tester);
+          expect(childKey.currentContext, isNull);
+          // A late successful refresh for the old session must not restore it.
+          refreshed.complete(_Token({'admin': true}));
+        } else if (outcome == 'error') {
+          refreshed.completeError(StateError('Token refresh failed'));
+        } else {
+          refreshed.complete(_Token({'admin': false, 'supportAdmin': true}));
+        }
+        await pumpAdmin(tester);
+        expect(childKey.currentContext, isNull);
+        expect(originalElement.mounted, isFalse);
+        expect(find.text('Protected admin'), findsNothing);
+        expect(find.text('Protected other'), findsNothing);
+        expect(find.text(outcome == 'logout'
+          ? 'Please sign in to access the admin dashboard.'
+          : outcome == 'error' ? 'Could not verify admin access. Please try again.'
+          : 'Access denied. An administrator account is required.'), findsOneWidget);
+      } finally {
+        if (!refreshed.isCompleted) refreshed.complete(_Token({}));
+        await tester.pumpWidget(const SizedBox());
+        await changes.close();
+      }
+    });
+  }
+
   test('Only boolean admin custom claim authorizes; supportAdmin and profile-like roles do not', () {
     for (final claims in [null, <String, dynamic>{}, {'admin': false}, {'admin': 'true'},
       {'supportAdmin': true}, {'accountType': 'admin'}]) {

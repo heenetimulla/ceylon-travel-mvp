@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import '../services/admin_service.dart';
 
 class AdminAccessGate extends StatefulWidget {
@@ -21,6 +22,7 @@ class _AdminAccessGateState extends State<AdminAccessGate> {
     builder: (context, snapshot) {
       final access = snapshot.hasError ? const AdminAccess(AdminAccessStatus.error)
         : snapshot.data ?? const AdminAccess(AdminAccessStatus.loading);
+      if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] adminAccessGate status=${access.status.name}'); }
       if (access.status == AdminAccessStatus.allowed && access.uid != null) {
         return KeyedSubtree(key: ValueKey(access.uid), child: widget.builder(context, access.uid!));
       }

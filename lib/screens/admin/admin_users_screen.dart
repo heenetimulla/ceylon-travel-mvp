@@ -155,7 +155,7 @@ class _AccountCard extends StatelessWidget {
         const SizedBox(height: 8),
         Wrap(spacing: 12, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
           Text(user.accountTypeLabel, style: AppTextStyles.body),
-          AppStatusChip(user.status ?? 'Unknown status'),
+          AppStatusChip(user.statusLabel),
         ]),
         const SizedBox(height: 12),
         Text('Phone: ${user.phoneNumber ?? 'Not available'}'),
@@ -163,6 +163,7 @@ class _AccountCard extends StatelessWidget {
         Text('Cancelled trips: ${user.cancelledTripsCount ?? 'Not available'}'),
         Text('Cancellation rate: ${user.cancellationRateLabel}'),
         Text('Average rating: ${user.averageRatingLabel} · Ratings: ${user.ratingsCount ?? 'Not available'}'),
+        if (user.registrationStatus != null) Text('Application: ${user.registrationStatus!.replaceAll('_', ' ')}'),
         if (user.verificationStatus != null) Text('Verification: ${user.verificationStatus!.replaceAll('_', ' ')}'),
         const SizedBox(height: 8),
         TextButton.icon(onPressed: onOpen, icon: const Icon(Icons.person_outline),

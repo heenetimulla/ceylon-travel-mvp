@@ -1,4 +1,5 @@
 import 'reputation_summary.dart';
+import 'trip_chat_unread_icon.dart';
 import 'app_components.dart';
 import '../../app/app_text_styles.dart';
 import '../../app/app_colors.dart';
@@ -40,6 +41,7 @@ class TripPostCard extends StatelessWidget {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   AppStatusChip(tripPost.status),
+                  if (TripPost.assignedStatuses.contains(tripPost.status)) TripChatUnreadIcon(trip: tripPost),
                   Text(tripPost.creatorTypeLabel, style: AppTextStyles.caption),
                 ],
               ),

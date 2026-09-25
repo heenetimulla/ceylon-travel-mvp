@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/services/auth_preferences_service.dart';
 import '../../core/services/auth_service.dart';
-import '../driver/driver_home_screen.dart';
-import '../tourist/tourist_home_screen.dart';
+import 'session_navigation.dart';
+import 'registration_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
@@ -107,32 +107,8 @@ class _LoginScreenState extends State<LoginScreen> {
           .get(const GetOptions(source: Source.server));
       if (!mounted) return;
       final data = profile.data();
-      if (!profile.exists || data == null) {
-        _showError(
-          'Your account profile could not be found. Please contact support.',
-        );
-        return;
-      }
-      if (data['status'] != 'active') {
-        _showError(
-          'This account is currently unavailable. Please contact support.',
-        );
-        return;
-      }
-      final Widget homeScreen;
-      switch (data['accountType']) {
-        case 'tourist':
-          homeScreen = const TouristHomeScreen();
-          break;
-        case 'driver':
-          homeScreen = const DriverHomeScreen();
-          break;
-        default:
-          _showError(
-            'Your account type is not supported. Please contact support.',
-          );
-          return;
-      }
+      final Widget homeScreen = data == null ? const RegistrationScreen(resumeAuthenticated: true)
+        : sessionDestination(user.uid, data);
       try {
         await widget.authPreferences.saveLastLoginEmail(email);
       } catch (_) {

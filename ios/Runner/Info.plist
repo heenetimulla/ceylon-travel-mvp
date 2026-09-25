@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Take a fresh verification selfie or a photo of your payment slip for private manual review.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Select identity documents and payment slips for private manual review.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Share your current location with the other participant in your trip chat when you choose Share Location.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

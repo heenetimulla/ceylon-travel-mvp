@@ -1,3 +1,6 @@
+import '../../core/models/registration_application.dart';
+import 'registration_application_screen.dart';
+import 'registration_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -20,16 +23,9 @@ Future<Widget> resolveStartupSession() async {
         .get(const GetOptions(source: Source.server))
         .timeout(const Duration(seconds: 15));
     final data = profile.data();
-    if (authService.currentUser?.uid == user.uid &&
-        profile.exists &&
-        data != null &&
-        data['status'] == 'active') {
-      switch (data['accountType']) {
-        case 'tourist':
-          return const TouristHomeScreen();
-        case 'driver':
-          return const DriverHomeScreen();
-      }
+    if (authService.currentUser?.uid == user.uid && !profile.exists) { return const RegistrationScreen(resumeAuthenticated: true); }
+    if (authService.currentUser?.uid == user.uid && data != null) {
+      return sessionDestination(user.uid, data);
     }
   } catch (_) {
     await authService.signOut();
@@ -87,4 +83,9 @@ class _LogoutButtonState extends State<LogoutButton> {
           : const Icon(Icons.logout),
     );
   }
+}
+
+Widget sessionDestination(String uid, Map<String, dynamic> data) {
+  if (!applicationOperational(data)) { return RegistrationApplicationScreen(uid: uid); }
+  return data['accountType'] == 'driver' ? const DriverHomeScreen() : const TouristHomeScreen();
 }

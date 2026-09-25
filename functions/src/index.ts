@@ -7,6 +7,7 @@ import {defineString} from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import {executeDeadline, pendingDeadline, Phase, tripIdFromPayload} from "./lifecycle";
 import {syncPublicProfile, syncPublicReview} from "./public_profiles";
+export {processDriverAdministration, processRegistrationApplication} from "./driver_administration_trigger";
 
 initializeApp();
 const db = getFirestore();

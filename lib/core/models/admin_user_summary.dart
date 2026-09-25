@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'account_attention.dart';
 
 enum AdminUserFilter {
   all('All', null),
@@ -17,11 +18,14 @@ class AdminUserSummary {
     this.phoneNumber, this.accountType, this.city, this.status,
     this.profilePhotoPath, this.completedTripsCount, this.cancelledTripsCount,
     this.cancellationRate, this.averageRating, this.ratingsCount,
-    this.verificationStatus, this.createdAt, this.updatedAt});
+    this.verificationStatus, this.registrationStatus, this.createdAt, this.updatedAt, this.operationalLabel});
+
+  final String? operationalLabel;
+  String get statusLabel => operationalLabel ?? (status ?? 'Unknown status').toUpperCase();
 
   final String uid;
   final String? fullName, email, phoneNumber, accountType, city, status,
-    profilePhotoPath, verificationStatus;
+    profilePhotoPath, verificationStatus, registrationStatus;
   final int? completedTripsCount, cancelledTripsCount, ratingsCount;
   final double? cancellationRate, averageRating;
   final DateTime? createdAt, updatedAt;
@@ -29,7 +33,7 @@ class AdminUserSummary {
   factory AdminUserSummary.fromMap(String uid, Map<String, dynamic> data) {
     final verification = data['verification'];
     return AdminUserSummary(
-      uid: uid,
+      uid: uid, registrationStatus: _text(data['registrationStatus']), operationalLabel: accountStatusLabel(data),
       fullName: _text(data['fullName']), email: _text(data['email']),
       phoneNumber: _text(data['phoneNumber']), accountType: _text(data['accountType']),
       city: _text(data['city']), status: _text(data['status']),
@@ -39,7 +43,7 @@ class AdminUserSummary {
       ratingsCount: _count(data['ratingsCount']),
       cancellationRate: _number(data['cancellationRate'], maximum: 100),
       averageRating: _number(data['averageRating'], maximum: 5),
-      verificationStatus: _text(data['verificationStatus']) ??
+      verificationStatus: _text(data['identityVerificationStatus']) ?? _text(data['verificationStatus']) ??
         (verification is Map ? _text(verification['status']) : null),
       createdAt: _date(data['createdAt']), updatedAt: _date(data['updatedAt']),
     );

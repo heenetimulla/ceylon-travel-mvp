@@ -82,6 +82,12 @@ export async function executeDeadline(db: Firestore, tripId: string, phase: Phas
       // Do not acknowledge an early task and silently lose the future transition.
       throw new Error("Deadline not yet due; retry task");
     }
+    // New registration applications cannot participate even through trusted timers.
+    // Legacy trips retain their established Stage 10 policy.
+    for (const uid of [trip.creatorId, trip.acceptedDriverId] as string[]) {
+      const profile = (await tx.get(db.collection("users").doc(uid))).data();
+      if (profile?.registrationStatus != null && (profile.registrationStatus !== "approved" || profile.accountStatus !== "active")) return "noop";
+    }
     const parties = [];
     if (phase === "end") {
       for (const uid of [trip.creatorId, trip.acceptedDriverId] as string[]) {

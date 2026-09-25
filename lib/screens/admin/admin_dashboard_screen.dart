@@ -7,6 +7,7 @@ import '../../core/widgets/admin_access_gate.dart';
 import '../../core/widgets/admin_stat_card.dart';
 import '../../core/widgets/app_components.dart';
 import 'admin_users_screen.dart';
+import 'admin_registration_queue_screen.dart';
 import 'admin_support_inbox_screen.dart';
 import '../../core/services/admin_support_service.dart';
 
@@ -71,6 +72,7 @@ class _OverviewState extends State<_Overview> {
       }
       final data = snapshot.data!;
       return ListView(padding: appPagePadding(context), children: [
+        PendingRegistrationsEntry(admin: widget.service),
         Card(child: ListTile(key: const Key('admin_support_entry'),
           leading: const Icon(Icons.support_agent), title: const Text('Support & Complaints'),
           subtitle: const Text('Review conversations and manage support requests'),

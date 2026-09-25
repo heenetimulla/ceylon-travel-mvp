@@ -1,3 +1,4 @@
+import 'registration_application_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/rating.dart';
@@ -20,6 +21,7 @@ class RatingService {
     final actor = uid;
     final parent = _db.collection('trip_posts').doc(tripId);
     await _db.runTransaction((tx) async {
+      await requireOperationalAccount(_db, actor, transaction: tx);
       final trip = TripPost.fromFirestore(await tx.get(parent));
       final direction = Rating.direction(trip, actor);
       final ratedUid = actor == trip.creatorId ? trip.acceptedDriverId! : trip.creatorId;

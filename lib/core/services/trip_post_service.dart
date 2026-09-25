@@ -1,3 +1,4 @@
+import '../models/registration_application.dart';
 import '../models/readable_reference.dart';
 import 'dart:async';
 import '../models/active_trip_order.dart';
@@ -66,7 +67,7 @@ class TripPostService {
           'Your profile could not be found. Please sign in again.',
         );
       }
-      if (data['status'] != 'active' || data['accountType'] != 'driver') {
+      if (!applicationOperational(data) || data['accountType'] != 'driver') {
         throw const TripPostServiceException(
           'Only active driver accounts can view their accepted trips.',
         );
@@ -146,11 +147,11 @@ class TripPostService {
           'Your profile could not be found. Please sign in again.',
         );
       }
-      if (data['status'] != 'active' ||
+      if (!applicationOperational(data) ||
           !['tourist', 'driver'].contains(data['accountType']) ||
           (accountType != null && data['accountType'] != accountType)) {
         throw const TripPostServiceException(
-          'Your account cannot view this trip list. Please sign in again.',
+          registrationAccessMessage,
         );
       }
       // Single-field queries match the read rules without composite indexes.
@@ -254,9 +255,9 @@ class TripPostService {
           'Your profile could not be found. Please sign in again.',
         );
       }
-      if (data['status'] != 'active') {
+      if (!applicationOperational(data)) {
         throw const TripPostServiceException(
-          'Your account must be active to create a post.',
+          registrationAccessMessage,
         );
       }
       final creatorType = data['accountType'];
