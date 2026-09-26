@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../services/driver_evidence_service.dart';
 import '../services/evidence_image_service.dart';
@@ -131,10 +130,8 @@ class _DriverEvidenceUploadState extends State<DriverEvidenceUpload> {
 class _EvidencePreview {
   DialogRoute<void>? _route;
   NavigatorState? _navigator;
-  Future<void> show(BuildContext context, Uint8List bytes, String title,
-      {void Function(Object)? onDecodeError}) async {
+  Future<void> show(BuildContext context, Uint8List bytes, String title) async {
     if (_route != null) {
-      if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] previewAlreadyOpen'); }
       return;
     }
     final navigator = Navigator.of(context, rootNavigator: true);
@@ -143,15 +140,8 @@ class _EvidencePreview {
     Padding(padding: const EdgeInsets.all(12), child: Text(title)),
     SizedBox(height: MediaQuery.sizeOf(context).height * .65, width: MediaQuery.sizeOf(context).width * .9,
       child: InteractiveViewer(minScale: 1, maxScale: 5, child: Image.memory(bytes, fit: BoxFit.contain,
-        errorBuilder: (_, error, _) {
-          if (kDebugMode) {
-            debugPrint('[PrivateEvidenceTrace] imageDecodeFailed runtimeType=${error.runtimeType}');
-            onDecodeError?.call(error);
-          }
-          return const Text('This photo cannot be displayed. Please request another photo.');
-        }))),
+        errorBuilder: (_, _, _) => const Text('This photo cannot be displayed. Please request another photo.')))),
     TextButton(onPressed: () {
-      if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] closeButton Navigator.pop'); }
       Navigator.pop(context);
     }, child: const Text('Close')),
     ])));
@@ -159,21 +149,17 @@ class _EvidencePreview {
     _navigator = navigator;
     try {
       final closed = navigator.push(route);
-      if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] previewOpened routePushed'); }
       await closed;
-      if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] previewRouteCompleted dismissalOrRemoval'); }
     }
     finally { if (identical(_route, route)) { _route = null; _navigator = null; } }
   }
 
   void dispose() {
     final route = _route, navigator = _navigator;
-    if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] previewDispose hasRoute=${route != null}'); }
     _route = null;
     _navigator = null;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (route != null && navigator != null && navigator.mounted && route.isActive) {
-        if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] ownerDisposed Navigator.removeRoute'); }
         navigator.removeRoute(route);
       }
     });
@@ -195,40 +181,26 @@ class _DriverEvidenceReviewState extends State<DriverEvidenceReview> {
   final _preview = _EvidencePreview();
   @override
   void dispose() {
-    if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] reviewWidgetDisposed busy=$_busy'); }
     _generation++; _preview.dispose(); super.dispose();
   }
   @override
   void didUpdateWidget(covariant DriverEvidenceReview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.uid != widget.uid || oldWidget.service != widget.service) {
-      if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] reviewOwnerOrServiceChanged'); }
       _generation++; _preview.dispose(); _busy = false; _error = null;
     }
   }
   Future<void> _view(String path, String label) async {
-    if (kDebugMode) {
-      debugPrint('[PrivateEvidenceTrace] buttonPressed DriverEvidenceReview._view');
-      debugPrint('[PrivateEvidenceTrace] path=$path');
-    }
     final generation = ++_generation;
     final service = widget.service ?? DriverEvidenceService();
-    var stage = 'private_fetch';
     setState(() { _busy = true; _error = null; });
-    if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] loadingStarted inlineIndicator'); }
     try {
       final bytes = await service.review(widget.uid, path);
       if (!mounted || generation != _generation) {
-        if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] downloadedResultIgnored mounted=$mounted generationChanged=${generation != _generation}'); }
         return;
       }
-      stage = 'open_memory_preview';
-      if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] beforePreviewOpen'); }
-      await _preview.show(context, bytes, label,
-        onDecodeError: (error) => service.debugReviewFailure(error, path, stage: 'image_decode'));
+      await _preview.show(context, bytes, label);
     } catch (error) {
-      if (kDebugMode) { debugPrint('[PrivateEvidenceTrace] caughtException viewer mounted=$mounted'); }
-      service.debugReviewFailure(error, path, stage: stage);
       if (mounted && generation == _generation) { setState(() => _error = DriverEvidenceService.reviewError(error)); }
     } finally { if (mounted && generation == _generation) { setState(() => _busy = false); } }
   }
