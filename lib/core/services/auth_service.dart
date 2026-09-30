@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'fcm_service.dart';
 
 class AuthService {
   AuthService({FirebaseAuth? firebaseAuth})
@@ -35,7 +36,16 @@ class AuthService {
   }
 
   Future<void> signOut() {
-    return _runAuthAction(_firebaseAuth.signOut);
+    return _runAuthAction(() async {
+      final uid = _firebaseAuth.currentUser?.uid;
+      if (uid != null) await FcmService.instance.beforeLogout(uid);
+      try {
+        await _firebaseAuth.signOut();
+      } catch (_) {
+        FcmService.instance.logoutFailed();
+        rethrow;
+      }
+    });
   }
 
   Future<T> _runAuthAction<T>(Future<T> Function() action) async {

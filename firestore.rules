@@ -100,6 +100,25 @@ service cloud.firestore {
       allow update: if isSignedIn() && validProfileEvent(userId, resource.data, request.resource.data);
     }
 
+    // Stage 12A: private per-installation tokens. No admin/client-to-client access.
+    match /users/{uid}/fcm_tokens/{tokenId} {
+      function validToken(d) {
+        return tokenId.matches('^[a-f0-9]{32}$')
+          && d.keys().hasAll(['token', 'platform', 'enabled', 'permission', 'createdAt', 'updatedAt', 'lastSeenAt'])
+          && d.keys().hasOnly(['token', 'platform', 'enabled', 'permission', 'createdAt', 'updatedAt', 'lastSeenAt'])
+          && d.token is string && d.token.size() > 0 && d.token.size() <= 4096
+          && d.platform == 'android' && d.enabled is bool
+          && d.permission in ['authorized', 'denied', 'not_determined']
+          && (!d.enabled || d.permission == 'authorized')
+          && d.createdAt is timestamp && d.updatedAt == request.time && d.lastSeenAt == request.time;
+      }
+      allow read, delete: if isOwner(uid);
+      allow create: if isOwner(uid) && validToken(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if isOwner(uid) && validToken(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
     // Application fields and immutable versions are exclusively worker-managed.
     function approvedAccountProfile(p) {
       // Missing registrationStatus is a pre-application legacy profile, never a new client create.

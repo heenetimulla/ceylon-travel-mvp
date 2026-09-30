@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'auth/session_navigation.dart';
+import '../core/services/fcm_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, this.resolveSession});
@@ -37,6 +38,7 @@ class _SplashScreenState extends State<SplashScreen> {
         MaterialPageRoute<void>(builder: (_) => destination),
         (route) => false,
       );
+      FcmService.instance.navigationReady.value = true;
     } catch (_) {
       if (!mounted) return;
       setState(() => _sessionCheckFailed = true);

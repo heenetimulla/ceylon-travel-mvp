@@ -1,7 +1,9 @@
 import {initializeApp} from "firebase-admin/app";
 import {getFirestore} from "firebase-admin/firestore";
 import {getFunctions} from "firebase-admin/functions";
-import {onDocumentWritten} from "firebase-functions/v2/firestore";
+import {getMessaging} from "firebase-admin/messaging";
+import {deliverChatPush, firestoreChatPushPort} from "./chat_push";
+import {onDocumentCreated, onDocumentWritten} from "firebase-functions/v2/firestore";
 import {onTaskDispatched} from "firebase-functions/v2/tasks";
 import {defineString} from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
@@ -76,4 +78,15 @@ export const scheduleTripLifecycle = onDocumentWritten({
     logger.error("Lifecycle enqueue failed", {tripId, phase, error});
     throw error;
   }
+});
+
+// Chat delivery is isolated from Stage 10 lifecycle writes and scheduling.
+export const notifyTripChatMessage = onDocumentCreated({
+  document: "trip_posts/{tripId}/messages/{messageId}", region, serviceAccount,
+  retry: false, timeoutSeconds: 60, maxInstances: 10,
+}, async event => {
+  const {tripId, messageId} = event.params;
+  const outcome = await deliverChatPush(firestoreChatPushPort(db, getMessaging(), tripId, messageId),
+    tripId, messageId, event.data?.data());
+  if (outcome === "failed") logger.warn("Trip chat push attempt failed");
 });
