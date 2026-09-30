@@ -63,3 +63,26 @@ test('chat delivery deduplication marker is backend-only', async () => {
     await assertFails(setDoc(doc(context.firestore(), 'trip_posts/t/messages/m/push_delivery/chat'), {attemptedAt: serverTimestamp()}));
   }
 });
+
+test('workflow staff discovery and delivery markers are server-only, including for admin clients', async () => {
+  const staffPath = 'notification_staff/owner';
+  const deliveryPath = `workflow_push_delivery/${'c'.repeat(64)}`;
+  await env.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), staffPath), {updatedAt: serverTimestamp()});
+    await setDoc(doc(ctx.firestore(), deliveryPath), {attemptedAt: serverTimestamp()});
+  });
+  for (const context of [env.authenticatedContext('owner'),
+    env.authenticatedContext('admin', {admin: true, supportAdmin: true}),
+    env.authenticatedContext('support', {supportAdmin: true}), env.unauthenticatedContext()]) {
+    const db = context.firestore();
+    for (const target of [staffPath, deliveryPath]) {
+      await assertFails(getDoc(doc(db, target)));
+      await assertFails(setDoc(doc(db, target), {admin: true, updatedAt: serverTimestamp()}));
+      await assertFails(deleteDoc(doc(db, target)));
+    }
+    await assertFails(getDocs(collection(db, 'notification_staff')));
+    await assertFails(getDocs(collection(db, 'workflow_push_delivery')));
+    await assertFails(setDoc(doc(db, 'notification_staff/forged'),
+      {admin: true, supportAdmin: true}));
+  }
+});

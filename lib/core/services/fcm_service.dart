@@ -11,7 +11,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../firebase_options.dart';
 import 'fcm_session.dart';
-import '../models/trip_chat_message.dart';
+import 'workflow_notification_resolver.dart';
 import '../models/trip_post.dart';
 import 'registration_application_service.dart';
 
@@ -30,11 +30,13 @@ class FcmService with WidgetsBindingObserver implements FcmTokenPort {
   final pendingIntent = ValueNotifier<TripChatPushIntent?>(null);
   final navigationReady = ValueNotifier<bool>(false);
   final _notifications = FlutterLocalNotificationsPlugin();
-  late final FcmSession _session = FcmSession(this);
+  late final FcmSession _session = FcmSession(this,
+    onUserChanged: (_) => pendingIntent.value = null);
   FirebaseAuth get _auth => FirebaseAuth.instance;
   FirebaseMessaging get _messaging => FirebaseMessaging.instance;
   bool _started = false;
   bool _loggingOut = false;
+  int _navigationEpoch = 0;
   String? _observedUid;
   String? _installationId;
   SharedPreferences? _preferences;
@@ -62,12 +64,13 @@ class FcmService with WidgetsBindingObserver implements FcmTokenPort {
         });
       await _notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(const AndroidNotificationChannel(channelId, 'Trip & Chat Notifications',
-          description: 'Private trip chat messages', importance: Importance.high, playSound: true));
+          description: 'Trip updates and private chat messages', importance: Importance.high, playSound: true));
       WidgetsBinding.instance.addObserver(this);
       _observedUid = _auth.currentUser?.uid;
       _auth.authStateChanges().listen((user) {
         if (_loggingOut && user?.uid == _observedUid && user != null) return;
         if (user?.uid != _observedUid) {
+          _navigationEpoch++;
           _loggingOut = false;
           _observedUid = user?.uid;
           pendingIntent.value = null;
@@ -76,6 +79,7 @@ class FcmService with WidgetsBindingObserver implements FcmTokenPort {
         }
         unawaited(_ignore(_session.changeUser(user?.uid)));
       }, onError: (Object _) {
+        _navigationEpoch++;
         pendingIntent.value = null;
         _observedUid = null;
         unawaited(_ignore(_session.changeUser(null)));
@@ -108,42 +112,68 @@ class FcmService with WidgetsBindingObserver implements FcmTokenPort {
 
   void _open(Map<String, dynamic> data) {
     if (_loggingOut) return;
-    pendingIntent.value = TripChatPushIntent.parse(_auth.currentUser?.uid, data);
+    pendingIntent.value = TripChatPushIntent.parse(_auth.currentUser?.uid, data, sessionEpoch: _navigationEpoch);
   }
 
+  bool isCurrentIntent(TripChatPushIntent intent) => !_loggingOut &&
+      intent.belongsTo(_auth.currentUser?.uid, _navigationEpoch);
+
+  Future<WorkflowDestination> loadWorkflow(TripChatPushIntent intent) =>
+      WorkflowNotificationResolver(_FirebaseWorkflowReader(this)).resolve(intent);
+
   Future<TripPost> loadChat(TripChatPushIntent intent) async {
-    if (_auth.currentUser?.uid != intent.uid) throw StateError('Session changed');
+    if (!isCurrentIntent(intent)) {
+      throw StateError('Session changed');
+    }
     final db = FirebaseFirestore.instance;
     await requireOperationalAccount(db, intent.uid).timeout(const Duration(seconds: 15));
     final snapshot = await db.collection('trip_posts').doc(intent.tripId)
       .get(const GetOptions(source: Source.server)).timeout(const Duration(seconds: 15));
     if (!snapshot.exists) throw StateError('Chat unavailable');
     final trip = TripPost.fromFirestore(snapshot);
-    if (_auth.currentUser?.uid != intent.uid || !TripChatMessage.hasCurrentAssignment(trip, intent.uid)) {
-      throw StateError('Chat no longer available');
+    if (!isCurrentIntent(intent) || !intent.allows(_auth.currentUser?.uid, snapshot.data()!)) {
+      throw StateError('Trip no longer available');
     }
     return trip;
   }
 
   Future<void> _foreground(RemoteMessage message) async {
     final actor = _auth.currentUser?.uid;
-    final intent = TripChatPushIntent.parse(actor, message.data);
+    final intent = TripChatPushIntent.parse(actor, message.data, sessionEpoch: _navigationEpoch);
     if (_loggingOut || intent == null || actor != _session.uid) return;
     // A previously queued delivery is not proof of current assignment access.
-    final trip = await loadChat(intent);
-    if (_auth.currentUser?.uid != actor || _session.uid != actor ||
-        !TripChatMessage.hasCurrentAssignment(trip, intent.uid)) {
+    if (intent.isWorkflow) {
+      final destination = await loadWorkflow(intent);
+      if (intent.type == 'membership_activated' && destination != WorkflowDestination.driverHome) {
+        return;
+      }
+    } else if (intent.type == 'trip_cancelled') {
+      // Cancellation revokes parent-trip access. The driver's immutable, private
+      // cancellation record is still owner-readable; never relax parent rules.
+      final db = FirebaseFirestore.instance;
+      await requireOperationalAccount(db, intent.uid).timeout(const Duration(seconds: 15));
+      final history = (await db.collection('trip_posts').doc(intent.tripId)
+          .collection('cancellations').doc(intent.uid)
+          .get(const GetOptions(source: Source.server)).timeout(const Duration(seconds: 15))).data();
+      if (history == null || history['tripId'] != intent.tripId ||
+          history['cancelledByRole'] != 'creator' || history['resultingStatus'] != 'cancelled') {
+        return;
+      }
+    } else {
+      await loadChat(intent);
+    }
+    if (!isCurrentIntent(intent) || _session.uid != actor) {
       return;
     }
     final key = message.messageId;
     if (key != null && !_seen.add(key)) return;
     if (_seen.length > 100) _seen.remove(_seen.first);
     // Only one foreground display path. Never use message text/profile fields.
-    await _notifications.show(intent.tripId.hashCode & 0x7fffffff, 'Ceylon Travel',
-      'You have a new trip message', const NotificationDetails(android: AndroidNotificationDetails(
+    await _notifications.show('${intent.type}:${intent.tripId}'.hashCode & 0x7fffffff, 'Ceylon Travel',
+      intent.body, const NotificationDetails(android: AndroidNotificationDetails(
         channelId, 'Trip & Chat Notifications', importance: Importance.high, priority: Priority.high,
         visibility: NotificationVisibility.private, icon: 'ic_stat_trip_chat')),
-      payload: jsonEncode({'type': 'trip_chat', 'tripId': intent.tripId, 'uid': actor}));
+      payload: jsonEncode({...intent.routingData, 'uid': actor}));
   }
 
   @override
@@ -210,6 +240,7 @@ class FcmService with WidgetsBindingObserver implements FcmTokenPort {
   Future<void> beforeLogout(String uid) async {
     if (!_started || _installationId == null) return;
     _loggingOut = true;
+    _navigationEpoch++;
     pendingIntent.value = null;
     await _ignore(_session.beforeLogout(uid).timeout(const Duration(seconds: 12)));
   }
@@ -232,4 +263,24 @@ class FcmService with WidgetsBindingObserver implements FcmTokenPort {
       // before this installation is associated with a different signed-in account.
     }
   }
+}
+
+class _FirebaseWorkflowReader implements WorkflowNotificationReader {
+  _FirebaseWorkflowReader(this.service);
+  final FcmService service;
+  @override
+  bool current(TripChatPushIntent intent) => service.isCurrentIntent(intent);
+  @override
+  Future<Map<String, dynamic>> refreshedClaims() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw StateError('Sign in required');
+    }
+    final token = await user.getIdTokenResult(true).timeout(const Duration(seconds: 15));
+    return token.claims ?? <String, dynamic>{};
+  }
+  @override
+  Future<Map<String, dynamic>?> read(String path) async =>
+      (await FirebaseFirestore.instance.doc(path).get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 15))).data();
 }

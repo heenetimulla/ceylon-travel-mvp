@@ -1,9 +1,12 @@
 import {initializeApp} from "firebase-admin/app";
-import {getFirestore} from "firebase-admin/firestore";
+import {getFirestore, Timestamp} from "firebase-admin/firestore";
 import {getFunctions} from "firebase-admin/functions";
 import {getMessaging} from "firebase-admin/messaging";
+import {getAuth} from "firebase-admin/auth";
+import {deliverWorkflowPush, firestoreWorkflowPort, syncNotificationStaff, WorkflowEvent} from "./workflow_push";
 import {deliverChatPush, firestoreChatPushPort} from "./chat_push";
-import {onDocumentCreated, onDocumentWritten} from "firebase-functions/v2/firestore";
+import {bidCreatedEvent, deliverTripPush, firestoreTripPushPort, tripTransitionEvent} from "./trip_push";
+import {onDocumentCreated, onDocumentCreatedWithAuthContext, onDocumentUpdated, onDocumentWritten} from "firebase-functions/v2/firestore";
 import {onTaskDispatched} from "firebase-functions/v2/tasks";
 import {defineString} from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
@@ -89,4 +92,94 @@ export const notifyTripChatMessage = onDocumentCreated({
   const outcome = await deliverChatPush(firestoreChatPushPort(db, getMessaging(), tripId, messageId),
     tripId, messageId, event.data?.data());
   if (outcome === "failed") logger.warn("Trip chat push attempt failed");
+});
+
+export const notifyTripBidCreated = onDocumentCreated({
+  document: "trip_posts/{tripId}/bids/{bidId}", region, serviceAccount,
+  retry: false, timeoutSeconds: 60, maxInstances: 10,
+}, async event => {
+  const {tripId, bidId} = event.params;
+  const commit = event.data?.createTime;
+  if (!commit) return;
+  const key = `bid:${bidId}:${commit.seconds}:${commit.nanoseconds}`;
+  const outcome = await deliverTripPush(firestoreTripPushPort(db, getMessaging(), tripId, key), tripId,
+    bidCreatedEvent(tripId, bidId, event.data?.data()));
+  if (outcome === "failed") logger.warn("Trip bid push attempt failed");
+});
+
+export const notifyTripTransition = onDocumentUpdated({
+  document: "trip_posts/{tripId}", region, serviceAccount,
+  retry: false, timeoutSeconds: 60, maxInstances: 10,
+}, async event => {
+  const change = event.data;
+  if (!change) return;
+  const notification = tripTransitionEvent(change.before.data(), change.after.data());
+  if (!notification) return;
+  const commit = change.after.updateTime;
+  if (!commit) return;
+  const key = `transition:${notification.type}:${commit.seconds}:${commit.nanoseconds}`;
+  const outcome = await deliverTripPush(
+    firestoreTripPushPort(db, getMessaging(), event.params.tripId, key), event.params.tripId, notification);
+  if (outcome === "failed") logger.warn("Trip transition push attempt failed");
+});
+
+// Candidate discovery is server managed and never grants authorization. Every
+// delivery independently checks current Auth claims, including revocations.
+export const syncNotificationStaffTokens = onDocumentWritten({
+  document: "users/{uid}/fcm_tokens/{tokenId}", region, serviceAccount,
+  retry: true, timeoutSeconds: 60, maxInstances: 10,
+}, async event => { await syncNotificationStaff(db, getAuth(), event.params.uid); });
+
+async function notifyWorkflow(event: WorkflowEvent, commit: Timestamp | undefined): Promise<void> {
+  if (!commit) return;
+  const outcome = await deliverWorkflowPush(firestoreWorkflowPort(db, getAuth(), getMessaging(), event,
+    `${commit.seconds}:${commit.nanoseconds}`), event);
+  if (outcome === "failed") logger.warn("Workflow push attempt failed");
+}
+
+export const notifySupportRequestCreated = onDocumentCreatedWithAuthContext({
+  document: "support_requests/{requestId}", region, serviceAccount,
+  retry: false, timeoutSeconds: 120, maxInstances: 10,
+}, async event => {
+  if (!event.data) return;
+  await notifyWorkflow({source: "support_request", path: event.data.ref.path, data: event.data.data(),
+    id: event.params.requestId, authId: event.authType === "system" ? undefined : event.authId}, event.data.createTime);
+});
+
+export const notifySupportReplyCreated = onDocumentCreatedWithAuthContext({
+  document: "support_requests/{requestId}/messages/{messageId}", region, serviceAccount,
+  retry: false, timeoutSeconds: 120, maxInstances: 10,
+}, async event => {
+  if (!event.data) return;
+  await notifyWorkflow({source: "support_message", path: event.data.ref.path, data: event.data.data(),
+    uid: event.params.requestId, id: event.params.messageId,
+    authId: event.authType === "system" ? undefined : event.authId}, event.data.createTime);
+});
+
+export const notifyRegistrationReviewEvent = onDocumentCreated({
+  document: "registration_applications/{uid}/history/{operationId}", region, serviceAccount,
+  retry: false, timeoutSeconds: 120, maxInstances: 10,
+}, async event => {
+  if (!event.data) return;
+  await notifyWorkflow({source: "application", path: event.data.ref.path, data: event.data.data(),
+    uid: event.params.uid, id: event.params.operationId}, event.data.createTime);
+});
+
+export const notifyDriverOperationCompleted = onDocumentUpdated({
+  document: "users/{uid}/driver_operations/{operationId}", region, serviceAccount,
+  retry: false, timeoutSeconds: 120, maxInstances: 10,
+}, async event => {
+  const change = event.data;
+  if (!change || change.before.data().status !== "pending" || change.after.data().status !== "succeeded") return;
+  await notifyWorkflow({source: "driver_operation", path: change.after.ref.path, data: change.after.data(),
+    uid: event.params.uid, id: event.params.operationId}, change.after.updateTime);
+});
+
+export const notifyFoundingOfferClosed = onDocumentCreated({
+  document: "admin_notifications/founding_offer_closed", region, serviceAccount,
+  retry: false, timeoutSeconds: 120, maxInstances: 10,
+}, async event => {
+  if (!event.data) return;
+  await notifyWorkflow({source: "founding", path: event.data.ref.path, data: event.data.data(),
+    id: "founding_offer_closed"}, event.data.createTime);
 });

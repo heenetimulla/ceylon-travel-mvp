@@ -1,4 +1,4 @@
-import {FieldPath, FieldValue, Firestore, Timestamp} from "firebase-admin/firestore";
+import {DocumentReference, FieldPath, FieldValue, Firestore, Timestamp} from "firebase-admin/firestore";
 import {Messaging, MulticastMessage} from "firebase-admin/messaging";
 
 type Data = Record<string, unknown>;
@@ -27,11 +27,20 @@ export function chatRecipient(tripId: string, messageId: string, trip: Data | un
 }
 
 export function chatPushPayload(tripId: string, tokens: string[]): MulticastMessage {
-  return {tokens, notification: {title: "Ceylon Travel", body: "You have a new trip message"},
-    data: {type: "trip_chat", tripId},
+  return tripPushPayload("trip_chat", tripId, "You have a new trip message", tokens);
+}
+
+export function tripPushPayload(type: string, tripId: string, body: string, tokens: string[]): MulticastMessage {
+  return notificationPayload(type, {tripId}, body, tokens);
+}
+
+export function notificationPayload(type: string, identifiers: Record<string, string>, body: string,
+  tokens: string[]): MulticastMessage {
+  return {tokens, notification: {title: "Ceylon Travel", body},
+    data: {type, ...identifiers},
     android: {priority: "high", ttl: 5 * 60 * 1000, notification: {
       channelId: "ceylon_travel_trip_chat", sound: "default", icon: "ic_stat_trip_chat",
-      visibility: "private", tag: `trip_chat_${tripId}`,
+      visibility: "private", tag: `${type}_${Object.values(identifiers).join("_")}`,
     }}};
 }
 
@@ -39,13 +48,15 @@ export const invalidToken = (code?: string): boolean =>
   code === "messaging/registration-token-not-registered" || code === "messaging/invalid-registration-token";
 
 export interface PushToken { id: string; token: string }
-export interface ChatPushPort {
-  loadTrip(): Promise<Data | undefined>;
+export interface PushDeliveryPort {
   // A durable, server-only at-most-once attempt marker, shared by trigger redeliveries.
   claim(): Promise<boolean>;
   tokens(uid: string): AsyncIterable<PushToken[]>;
   send(payload: MulticastMessage): Promise<{responses: {success: boolean; error?: {code: string}}[]}>;
   removeIfUnchanged(uid: string, token: PushToken): Promise<void>;
+}
+export interface ChatPushPort extends PushDeliveryPort {
+  loadTrip(): Promise<Data | undefined>;
 }
 
 export async function deliverChatPush(port: ChatPushPort, tripId: string, messageId: string,
@@ -53,6 +64,20 @@ export async function deliverChatPush(port: ChatPushPort, tripId: string, messag
   try {
     const recipient = chatRecipient(tripId, messageId, await port.loadTrip(), message);
     if (!recipient || !await port.claim()) return "ignored";
+    return await deliverPushRecipient(port, recipient,
+      async () => chatRecipient(tripId, messageId, await port.loadTrip(), message) === recipient,
+      tokens => chatPushPayload(tripId, tokens));
+  } catch (_) {
+    return "failed";
+  }
+}
+
+// Shared delivery/cleanup for chat, bids and lifecycle notifications. Callers
+// claim a durable attempt first and supply their own current-state authorization.
+export async function deliverPushRecipient(port: PushDeliveryPort, recipient: string,
+  authorized: () => Promise<boolean>, payload: (tokens: string[]) => MulticastMessage,
+): Promise<"ignored" | "attempted" | "failed"> {
+  try {
     const seen = new Set<string>();
     let failed = false;
     for await (const page of port.tokens(recipient)) {
@@ -63,8 +88,8 @@ export async function deliverChatPush(port: ChatPushPort, tripId: string, messag
       });
       if (!devices.length) continue;
       // Re-read immediately before EVERY send, including later device pages.
-      if (chatRecipient(tripId, messageId, await port.loadTrip(), message) !== recipient) return "ignored";
-      const result = await port.send(chatPushPayload(tripId, devices.map(d => d.token)));
+      if (!await authorized()) return "ignored";
+      const result = await port.send(payload(devices.map(d => d.token)));
       for (let i = 0; i < result.responses.length; i++) {
         if (invalidToken(result.responses[i].error?.code)) await port.removeIfUnchanged(recipient, devices[i]);
         else if (!result.responses[i].success) failed = true;
@@ -81,8 +106,18 @@ export function firestoreChatPushPort(db: Firestore, messaging: Messaging, tripI
   messageId: string): ChatPushPort {
   const trip = db.collection("trip_posts").doc(tripId);
   const attempt = trip.collection("messages").doc(messageId).collection("push_delivery").doc("chat");
+  return firestorePushPort(db, messaging, tripId, attempt);
+}
+
+export function firestorePushPort(db: Firestore, messaging: Messaging, tripId: string,
+  attempt: DocumentReference): ChatPushPort {
+  const trip = db.collection("trip_posts").doc(tripId);
+  return {...firestoreDeliveryPort(db, messaging, attempt), loadTrip: async () => (await trip.get()).data()};
+}
+
+export function firestoreDeliveryPort(db: Firestore, messaging: Messaging,
+  attempt: DocumentReference): PushDeliveryPort {
   return {
-    loadTrip: async () => (await trip.get()).data(),
     claim: () => db.runTransaction(async tx => {
       if ((await tx.get(attempt)).exists) return false;
       tx.create(attempt, {attemptedAt: FieldValue.serverTimestamp()});
