@@ -98,7 +98,7 @@ class TripChatPushIntent {
     else if (isSupport) 'supportRequestId': resourceId
     else if (type == 'founding_offer_closed') 'eventId': resourceId
     else 'accountUid': resourceId,
-    if (paymentId != null) 'paymentId': paymentId!};
+    'paymentId': ?paymentId};
   bool get opensBids => type == 'new_bid' || type == 'trip_reopened';
 
   /// Only call with freshly fetched server state, never notification data.
