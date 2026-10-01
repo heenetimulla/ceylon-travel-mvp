@@ -1,5 +1,6 @@
 import '../../core/models/registration_application.dart';
 import 'registration_application_screen.dart';
+import 'profile_settings_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/support_service.dart';
@@ -18,10 +19,22 @@ class AccountScreen extends StatefulWidget {
   State<AccountScreen> createState() => _AccountScreenState();
 }
 class _AccountScreenState extends State<AccountScreen> {
-  late final _profile = SupportService().loadProfile();
+  late Future<Map<String, dynamic>> _profile = SupportService().loadProfile();
   @override
   Widget build(BuildContext context) => Scaffold(appBar: const AppPageAppBar(title: Text('Account & Support')),
     body: ListView(padding: appPagePadding(context), children: [
+      ListTile(leading: const Icon(Icons.manage_accounts_outlined),
+        title: const Text('Profile & Account Settings'),
+        subtitle: const Text('Personal details and secure phone change'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () async {
+          await Navigator.push(context, MaterialPageRoute<void>(
+            builder: (_) => const ProfileSettingsScreen()));
+          if (mounted) {
+            final profile = SupportService().loadProfile();
+            setState(() { _profile = profile; });
+          }
+        }),
       FutureBuilder<Map<String, dynamic>>(future: _profile, builder: (context, snapshot) {
         if (snapshot.hasError) return const Text('Profile unavailable. Please reopen this screen to retry.');
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());

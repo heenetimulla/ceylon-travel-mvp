@@ -48,6 +48,30 @@ class AuthService {
     });
   }
 
+  /// Re-authenticates the same email/password account; never changes Auth's phone identity.
+  Future<void> reauthenticateForProfileChange({
+    required String expectedUid,
+    required String password,
+  }) => _runAuthAction(() async {
+    final user = currentUser;
+    if (user == null || user.uid != expectedUid) {
+      throw FirebaseAuthException(code: 'requires-recent-login');
+    }
+    final email = user.email;
+    if (email == null || !user.providerData.any((p) => p.providerId == 'password')) {
+      throw FirebaseAuthException(code: 'unsupported-provider',
+        message: 'Phone changes require email and password sign-in. Contact support.');
+    }
+    await user.reauthenticateWithCredential(
+      EmailAuthProvider.credential(email: email, password: password),
+    );
+    if (currentUser?.uid != expectedUid) {
+      throw FirebaseAuthException(code: 'requires-recent-login');
+    }
+    // Refresh auth_time for the server-enforced recent authentication rule.
+    await user.getIdTokenResult(true);
+  });
+
   Future<T> _runAuthAction<T>(Future<T> Function() action) async {
     try {
       return await action();
@@ -102,6 +126,8 @@ class AuthServiceException implements Exception {
         return 'Choose a stronger password.';
       case 'network-request-failed':
         return 'Check your internet connection and try again.';
+      case 'requires-recent-login':
+        return 'Please sign in again before changing your phone number.';
       default:
         return exception.message ?? 'Authentication failed. Please try again.';
     }

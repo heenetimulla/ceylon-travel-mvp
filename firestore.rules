@@ -80,6 +80,24 @@ service cloud.firestore {
         && validVerification(data.verification);
     }
 
+    // Stage 13A: current display/contact fields only; never application history.
+    function validSelfProfileUpdate(uid, before, after) {
+      let changed = after.diff(before).affectedKeys();
+      let authTime = request.auth.token.get('auth_time', 0);
+      return isOwner(uid)
+        && changed.hasOnly(['fullName', 'city', 'phoneNumber', 'updatedAt'])
+        && after.updatedAt == request.time
+        && (!changed.hasAny(['fullName']) || (after.fullName is string
+          && after.fullName.size() > 0 && after.fullName.size() <= 120
+          && after.fullName.matches('^\\S([\\s\\S]*\\S)?$')))
+        && (!changed.hasAny(['city']) || (after.city is string && after.city.size() <= 100))
+        && (!changed.hasAny(['phoneNumber']) || (after.phoneNumber is string
+          && after.phoneNumber.matches('^\\+?[0-9][0-9 ()-]{5,24}$')
+          && authTime is int && authTime > 0
+          && authTime * 1000 <= request.time.toMillis()
+          && request.time.toMillis() - authTime * 1000 <= 300000));
+    }
+
     match /users/{userId} {
       // Exact field allowlists prevent clients from adding privileged fields.
       // Server timestamp transforms must resolve to this request's time.
@@ -94,10 +112,14 @@ service cloud.firestore {
 
       allow get: if isOwner(userId);
       // Count queries require list permission; only trusted admins may list profiles.
-      // General editing remains disabled. Stage 10 events alone update metrics.
+      // Stage 10 events alone update metrics; owner edits use a separate allowlist.
       allow list: if isAdmin();
       allow delete: if false;
-      allow update: if isSignedIn() && validProfileEvent(userId, resource.data, request.resource.data);
+      allow update: if isSignedIn() &&
+        (request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['fullName', 'city', 'phoneNumber', 'updatedAt'])
+          ? validSelfProfileUpdate(userId, resource.data, request.resource.data)
+          : validProfileEvent(userId, resource.data, request.resource.data));
     }
 
     // Stage 12A: private per-installation tokens. No admin/client-to-client access.

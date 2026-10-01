@@ -6,7 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=1 lifecycle.test.mjs fcm_tokens.test.mjs"
+    "test": "node --test --test-concurrency=1 lifecycle.test.mjs fcm_tokens.test.mjs profile_settings.test.mjs"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.0",
