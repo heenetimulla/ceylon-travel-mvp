@@ -20,8 +20,8 @@ Map<String, dynamic> _profile({bool driver = false, String status = 'draft'}) =>
   'fullName': 'Applicant', 'phoneNumber': '0771234567', 'city': 'Colombo', 'email': 'owner@example.com',
   if (driver) ...{'vehicleType': 'Small Car', 'vehicleNumber': 'ABC-1234', 'operatingArea': 'Colombo', 'availableAreas': 'Western'},
 };
-Widget _panel(_Service service, {bool admin = false}) => MaterialApp(home: Scaffold(body: SingleChildScrollView(
-  child: RegistrationApplicationPanel(uid: 'owner', admin: admin, service: service, evidenceService: _Evidence(), images: _Images()))));
+Widget _panel(_Service service, {bool admin = false, bool upgrade = false}) => MaterialApp(home: Scaffold(body: SingleChildScrollView(
+  child: RegistrationApplicationPanel(uid: 'owner', admin: admin, upgradeRequest: upgrade, service: service, evidenceService: _Evidence(), images: _Images()))));
 Future<void> _tap(WidgetTester tester, Finder finder) async {
   await tester.ensureVisible(finder); await tester.pumpAndSettle(); await tester.tap(finder); await tester.pumpAndSettle();
 }
@@ -45,7 +45,7 @@ void main() {
     data['accountStatus'] = 'inactive'; expect(applicationOperational(data), isFalse); expect(driverCanBid(data), isFalse);
   });
   test('Submission requires correct documents and explicit versioned agreement', () {
-    expect(registrationAgreementVersion, '1.0');
+    expect(registrationAgreementVersion, '1.1');
     String? validate(bool driver, Map<String, String> evidence, bool agreement) => validateApplicationSubmission(
       driver: driver, nic: '901234567V', licence: 'B1234567', evidence: evidence, agreement: agreement);
     expect(validate(false, {'nic': 'private'}, true), isNotNull);
@@ -90,7 +90,7 @@ void main() {
     await _tap(tester, find.text('Submit Application'));
     expect(service.calls.single['action'], 'submit_application');
     final payload = service.calls.single['payload'] as Map;
-    expect(payload['agreementVersion'], '1.0'); expect(payload['agreementAccepted'], isTrue);
+    expect(payload['agreementVersion'], '1.1'); expect(payload['agreementAccepted'], isTrue);
     expect(payload.containsKey('agreementAcceptedAt'), isFalse);
     expect(payload.containsKey('drivingLicenceNumber'), driver);
     expect((payload['evidence'] as Map).values.every((p) => (p as String).startsWith('registration_evidence/owner/1/')), isTrue);
@@ -141,6 +141,103 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+  test('Upgrade identity validation requires licence, new selfie and explicit current agreement', () {
+    String? check({String licence = 'B1234567', Map<String, String> evidence = const {'driving_licence': 'private', 'selfie': 'private'}, bool agreement = true}) =>
+      validateApplicationSubmission(driver: true, nic: '', licence: licence, evidence: evidence, agreement: agreement, reuseNic: true);
+    expect(check(), isNull);
+    expect(check(licence: ''), contains('Driving Licence'));
+    expect(check(evidence: {'selfie': 'private'}), isNotNull);
+    expect(check(evidence: {'driving_licence': 'private'}), isNotNull);
+    expect(check(agreement: false), contains('Agreement'));
+    expect(registrationGuidelinesV1, hasLength(8));
+    expect(registrationGuidelinesV1.any((text) => text.contains('VerTech')), isFalse);
+    expect(registrationGuidelines.any((text) => text.contains('except to the extent liability cannot legally be excluded')), isTrue);
+    expect(driverUpgradeVehicleTypes, contains('Any'));
+  });
+  testWidgets('Tourist starts a same-UID upgrade draft without another account', (tester) async {
+    final service = _Service({..._profile(status: 'approved'), 'accountStatus': 'active', 'applicationRevision': 1});
+    await tester.pumpWidget(_panel(service, upgrade: true)); await tester.pumpAndSettle();
+    await _tap(tester, find.byKey(const ValueKey('startDriverUpgrade')));
+    expect(service.calls.single['action'], 'start_driver_upgrade');
+    expect(service.calls.single['uid'], 'owner');
+    expect(service.calls.single['payload'], isEmpty);
+    expect(service.profile['accountType'], 'tourist');
+    expect(service.profile['registrationStatus'], 'approved');
+    expect(find.byKey(const ValueKey('startDriverUpgrade')), findsNothing);
+    expect(find.text('Status: draft'), findsOneWidget);
+  });
+  testWidgets('legacy Tourist with unconfirmed operation cannot submit a duplicate draft', (tester) async {
+    final profile = {..._profile(status: 'approved'), 'accountStatus': 'active'}..remove('registrationStatus');
+    final service = _Service(profile)..operations.add({'action': 'start_driver_upgrade', 'status': 'pending'});
+    await tester.pumpWidget(_panel(service, upgrade: true)); await tester.pumpAndSettle();
+    final button = tester.widget<FilledButton>(find.byKey(const ValueKey('startDriverUpgrade')));
+    expect(button.onPressed, isNull);
+    expect(find.textContaining('An application action may still be queued'), findsOneWidget);
+    expect(service.calls, isEmpty);
+  });
+  test('malformed upgrade status and source revision fail closed in the form model', () {
+    final data = RegistrationApplicationData({..._profile(status: 'approved'), 'driverUpgradeStatus': 42},
+      {'purpose': 'driver_upgrade', 'identitySourceRevision': 0}, []);
+    expect(data.status, 'unavailable');
+    expect(data.reusesNic, isFalse);
+  });
+  for (final status in ['draft', 'correction_required', 'rejected']) {
+    testWidgets('Upgrade $status reuses verified NIC, requires driver data and submits at current revision', (tester) async {
+      final service = _Service({..._profile(status: 'approved'), 'accountStatus': 'active', 'applicationRevision': 2,
+        'driverUpgradeStatus': status}, application: {'purpose': 'driver_upgrade', 'identitySourceRevision': 1,
+          'reason': 'Please replace the licence image.', 'profile': {'vehicleType': 'Any', 'vehicleNumber': 'ABC-1234',
+            'vehicleDetails': 'Toyota sedan', 'operatingArea': 'Colombo', 'availableAreas': 'Western'}});
+      await tester.pumpWidget(_panel(service, upgrade: true)); await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('application_nicNumber')), findsNothing);
+      expect(find.byKey(const ValueKey('application_phoneNumber')), findsNothing);
+      expect(find.byType(DriverEvidenceUpload), findsNWidgets(2));
+      expect(find.byKey(const ValueKey('application_vehicleDetails')), findsOneWidget);
+      expect(find.byKey(const ValueKey('startDriverUpgrade')), findsNothing);
+      await _tap(tester, find.byKey(const ValueKey('reviewApplication')));
+      expect(service.calls, isEmpty);
+      await tester.ensureVisible(find.byKey(const ValueKey('application_drivingLicenceNumber')));
+      await tester.enterText(find.byKey(const ValueKey('application_drivingLicenceNumber')), 'B1234567');
+      for (final type in ['driving_licence', 'selfie']) {
+        await _tap(tester, find.byKey(ValueKey('choose_$type')));
+        final card = find.byKey(ValueKey('application_2_$type'));
+        await _tap(tester, find.descendant(of: card, matching: find.byType(CheckboxListTile)));
+        await _tap(tester, find.byKey(ValueKey('upload_$type')));
+      }
+      await _tap(tester, find.byKey(const ValueKey('registrationAgreement')));
+      await _tap(tester, find.byKey(const ValueKey('reviewApplication')));
+      await _tap(tester, find.text('Submit Application'));
+      final call = service.calls.single;
+      expect(call['uid'], 'owner'); expect(call['action'], 'submit_driver_upgrade'); expect(call['revision'], 2);
+      final payload = call['payload'] as Map;
+      expect(payload['agreementVersion'], '1.1');
+      expect(payload.containsKey('nicNumber'), isFalse);
+      expect((payload['profile'] as Map).keys.toSet(), {'vehicleType', 'vehicleNumber', 'vehicleDetails', 'operatingArea', 'availableAreas'});
+      expect((payload['evidence'] as Map).values.every((path) => (path as String).startsWith('registration_evidence/owner/3/')), isTrue);
+      expect(service.profile['accountType'], 'tourist'); expect(service.profile['accountStatus'], 'active');
+      expect(find.text('Status: pending review'), findsOneWidget);
+      expect(find.byKey(const ValueKey('reviewApplication')), findsNothing);
+    });
+  }
+  testWidgets('Admin upgrade review exposes corrections but no premature approval/activation', (tester) async {
+    final service = _Service({..._profile(status: 'approved'), 'accountStatus': 'active',
+      'driverUpgradeStatus': 'pending_review', 'applicationRevision': 2}, application: {
+        'purpose': 'driver_upgrade', 'nicNumber': '901234567V', 'drivingLicenceNumber': 'B1234567', 'agreementVersion': '1.1'});
+    await tester.pumpWidget(_panel(service, admin: true)); await tester.pumpAndSettle();
+    expect(find.text('Approve application'), findsNothing);
+    expect(find.text('Request correction'), findsOneWidget);
+    expect(find.text('Reject application'), findsOneWidget);
+    expect(find.textContaining('drivingLicenceNumber: B1234567'), findsOneWidget);
+    expect(find.text('Activate membership'), findsNothing);
+  });
+  testWidgets('Approved upgrade still cannot activate a Tourist from the client', (tester) async {
+    final service = _Service({..._profile(status: 'approved'), 'accountStatus': 'active',
+      'driverUpgradeStatus': 'approved'}, application: {'purpose': 'driver_upgrade'});
+    await tester.pumpWidget(_panel(service, upgrade: true)); await tester.pumpAndSettle();
+    expect(find.textContaining('trusted account transition, payment verification'), findsOneWidget);
+    expect(find.byKey(const ValueKey('startDriverUpgrade')), findsNothing);
+    expect(driverCanBid(service.profile), isFalse);
+    expect(service.calls, isEmpty);
+  });
   test('Normal admin summary does not search private identity/evidence', () {
     final user = AdminUserSummary.fromMap('owner', {..._profile(), 'nicNumber': '901234567V', 'drivingLicenceNumber': 'B1234567', 'evidence': 'private-secret'});
     expect(user.registrationStatus, 'draft');
@@ -152,10 +249,11 @@ class _Service extends RegistrationApplicationService {
   Map<String, dynamic> profile;
   Map<String, dynamic>? application;
   final history = <Map<String, dynamic>>[];
+  final operations = <Map<String, dynamic>>[];
   Map<String, dynamic> submission = {};
   final calls = <Map<String, dynamic>>[];
   @override
-  Future<RegistrationApplicationData> load(String uid, {bool admin = false}) async => RegistrationApplicationData(profile, application, [], history: history);
+  Future<RegistrationApplicationData> load(String uid, {bool admin = false}) async => RegistrationApplicationData(profile, application, operations, history: history);
   @override
   Future<Map<String, dynamic>> loadSubmission(String uid, int revision, {bool admin = false}) async => submission;
   @override
@@ -163,7 +261,17 @@ class _Service extends RegistrationApplicationService {
   @override
   Future<void> perform(String uid, String action, Map<String, dynamic> payload,
     {required int revision, required String operationId, bool admin = false, String reason = ''}) async {
-    calls.add({'action': action, 'payload': payload, 'revision': revision, 'reason': reason});
+    calls.add({'uid': uid, 'action': action, 'payload': payload, 'revision': revision, 'reason': reason});
+    if (action == 'start_driver_upgrade') {
+      profile = {...profile, 'driverUpgradeStatus': 'draft'};
+      application = {'purpose': 'driver_upgrade', 'identitySourceRevision': 1};
+      return;
+    }
+    if (action == 'submit_driver_upgrade') {
+      profile = {...profile, 'driverUpgradeStatus': 'pending_review', 'applicationRevision': revision + 1};
+      application = {...?application, ...payload, 'purpose': 'driver_upgrade'};
+      return;
+    }
     profile = {...profile, 'registrationStatus': action == 'submit_application' ? 'pending_review' : 'rejected'};
   }
 }

@@ -151,6 +151,28 @@ service cloud.firestore {
     function approvedAccount(uid) {
       return approvedAccountProfile(get(/databases/$(database)/documents/users/$(uid)).data);
     }
+    function validDriverUpgradeOperation(uid, d) {
+      let p = get(/databases/$(database)/documents/users/$(uid)).data;
+      return isOwner(uid) && p.accountType == 'tourist' && p.status == 'active'
+        && p.get('registrationStatus', 'approved') == 'approved'
+        && p.get('accountStatus', p.status) == 'active'
+        && d.expectedRevision == p.get('applicationRevision', 0)
+        && (d.action == 'start_driver_upgrade'
+          ? p.get('driverUpgradeStatus', null) == null && d.payload.keys().size() == 0
+          : d.action == 'submit_driver_upgrade'
+            && p.get('driverUpgradeStatus', '') in ['draft', 'correction_required', 'rejected']
+            && d.payload.keys().hasAll(['profile', 'drivingLicenceNumber', 'evidence', 'agreementVersion', 'agreementAccepted'])
+            && d.payload.keys().hasOnly(['profile', 'nicNumber', 'drivingLicenceNumber', 'evidence', 'agreementVersion', 'agreementAccepted'])
+            && d.payload.agreementVersion == '1.1' && d.payload.agreementAccepted == true
+            && d.payload.profile is map
+            && d.payload.profile.keys().hasAll(['vehicleType', 'vehicleNumber', 'vehicleDetails', 'operatingArea', 'availableAreas'])
+            && d.payload.profile.keys().hasOnly(['vehicleType', 'vehicleNumber', 'vehicleDetails', 'operatingArea', 'availableAreas'])
+            && d.payload.drivingLicenceNumber is string && d.payload.drivingLicenceNumber.size() > 0
+            && d.payload.drivingLicenceNumber.size() <= 40
+            && (!('nicNumber' in d.payload) || (d.payload.nicNumber is string && d.payload.nicNumber.size() <= 40))
+            && validEvidenceInput(d.payload.evidence)
+            && d.payload.evidence.keys().hasAll(['driving_licence', 'selfie']));
+    }
     function validApplicationOperation(uid, d) {
       return isSignedIn() && d.keys().hasAll(['actorUid', 'action', 'payload', 'expectedRevision', 'reason', 'status', 'createdAt'])
         && d.keys().hasOnly(['actorUid', 'action', 'payload', 'expectedRevision', 'reason', 'status', 'createdAt'])
@@ -161,11 +183,12 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/users/$(uid)).data.registrationStatus in ['draft', 'correction_required', 'rejected']
           && d.payload.keys().hasAll(['profile', 'nicNumber', 'evidence', 'agreementVersion', 'agreementAccepted'])
           && d.payload.keys().hasOnly(['profile', 'nicNumber', 'drivingLicenceNumber', 'evidence', 'agreementVersion', 'agreementAccepted'])
-          && d.payload.agreementVersion == '1.0' && d.payload.agreementAccepted == true
+          && d.payload.agreementVersion == '1.1' && d.payload.agreementAccepted == true
           && d.payload.profile is map && d.payload.profile.keys().hasOnly(['fullName', 'phoneNumber', 'city', 'vehicleType', 'vehicleNumber', 'operatingArea', 'availableAreas'])
           && d.payload.nicNumber is string && d.payload.nicNumber.size() <= 40
           && (!('drivingLicenceNumber' in d.payload) || (d.payload.drivingLicenceNumber is string && d.payload.drivingLicenceNumber.size() <= 40))
           && validEvidenceInput(d.payload.evidence))
+        || (d.action in ['start_driver_upgrade', 'submit_driver_upgrade'] && validDriverUpgradeOperation(uid, d))
         || (isAdmin() && d.action in ['approve', 'reject', 'request_correction'] && d.payload.keys().size() == 0
           && (d.action == 'approve' || d.reason.size() > 0)));
     }

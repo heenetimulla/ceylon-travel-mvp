@@ -22,7 +22,8 @@ service firebase.storage {
           && int(m.width) >= 400 && int(m.width) <= edge
           && int(m.height) >= 400 && int(m.height) <= edge;
       }
-      allow get: if request.auth != null && (request.auth.uid == uid || request.auth.token.admin == true);
+      allow get: if request.auth != null && (request.auth.uid == uid
+        || ('admin' in request.auth.token && request.auth.token.admin == true));
       // Append-only objects. Replacement uses a fresh random name; historical evidence cannot be edited/deleted.
       allow write: if request.resource != null && resource == null && applicant() && validImage();
       allow list: if false;
@@ -30,9 +31,14 @@ service firebase.storage {
     match /registration_evidence/{uid}/{revision}/{kind}/{file} {
       function applicant() {
         let p = firestore.get(/databases/(default)/documents/users/$(uid)).data;
-        return request.auth != null && request.auth.uid == uid && p.accountType in ['tourist', 'driver'] && (p.accountType == 'driver' || kind != 'driving_licence')
+        let upgrade = p.accountType == 'tourist' && p.status == 'active'
+          && p.get('registrationStatus', 'approved') == 'approved'
+          && p.get('accountStatus', p.status) == 'active'
+          && p.get('driverUpgradeStatus', '') in ['draft', 'correction_required', 'rejected'];
+        return request.auth != null && request.auth.uid == uid && p.accountType in ['tourist', 'driver']
+          && (upgrade || p.accountType == 'driver' || kind != 'driving_licence')
           && p.get('applicationRevision', -1) + 1 == int(revision)
-          && p.get('registrationStatus', '') in ['draft', 'correction_required', 'rejected'];
+          && (upgrade || p.get('registrationStatus', '') in ['draft', 'correction_required', 'rejected']);
       }
       function validImage() {
         let m = request.resource.metadata;
@@ -48,7 +54,8 @@ service firebase.storage {
           && int(m.width) >= 400 && int(m.width) <= edge
           && int(m.height) >= 400 && int(m.height) <= edge;
       }
-      allow get: if request.auth != null && (request.auth.uid == uid || request.auth.token.admin == true);
+      allow get: if request.auth != null && (request.auth.uid == uid
+        || ('admin' in request.auth.token && request.auth.token.admin == true));
       // Append-only objects. Replacement uses a fresh random name; historical evidence cannot be edited/deleted.
       allow write: if request.resource != null && resource == null && applicant() && validImage();
       allow list: if false;

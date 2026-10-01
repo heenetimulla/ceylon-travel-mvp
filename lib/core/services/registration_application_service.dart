@@ -9,8 +9,14 @@ class RegistrationApplicationData {
   final Map<String, dynamic>? application;
   final List<Map<String, dynamic>> operations;
   final List<Map<String, dynamic>> history;
+  bool get isUpgrade => application?['purpose'] == 'driver_upgrade';
+  bool get reusesNic {
+    final sourceRevision = application?['identitySourceRevision'];
+    return isUpgrade && sourceRevision is int && sourceRevision > 0;
+  }
   int get revision => profile['applicationRevision'] is int ? profile['applicationRevision'] as int : 0;
-  String get status => !profile.containsKey('registrationStatus') ? 'legacy'
+  String get status => isUpgrade ? (profile['driverUpgradeStatus'] is String ? profile['driverUpgradeStatus'] as String : 'unavailable')
+    : !profile.containsKey('registrationStatus') ? 'legacy'
     : profile['registrationStatus'] is String ? profile['registrationStatus'] as String : 'unavailable';
   bool get pendingOperation => operations.any((op) => op['status'] == 'pending');
 }
@@ -48,10 +54,8 @@ class RegistrationApplicationService {
       profile = docs.docs.isEmpty ? null : docs.docs.single.data();
     } else { profile = (await db.collection('users').doc(uid).get(const GetOptions(source: Source.server))).data(); }
     if (profile == null) { throw StateError('Your profile is unavailable. Please finish registration or contact support.'); }
-    if (!profile.containsKey('registrationStatus')) {
-      if (await access(uid, admin) != actor) { throw StateError('Your session changed.'); }
-      return RegistrationApplicationData(profile, null, []);
-    }
+    // Legacy Tourists can also have an unconfirmed start-upgrade operation.
+    // Always load the existing bounded queue instead of treating them as idle.
     final app = await db.collection('registration_applications').doc(uid).get(const GetOptions(source: Source.server));
     final ops = await db.collection('users').doc(uid).collection('application_operations')
       .orderBy('createdAt', descending: true).limit(20).get(const GetOptions(source: Source.server));
@@ -83,7 +87,8 @@ class RegistrationApplicationService {
     if (!RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(operationId) || revision < 0) {
       throw ArgumentError('Invalid application operation.');
     }
-    if (!(admin ? ['approve', 'reject', 'request_correction'] : ['submit_application']).contains(action)) {
+    if (!(admin ? ['approve', 'reject', 'request_correction']
+      : ['submit_application', 'start_driver_upgrade', 'submit_driver_upgrade']).contains(action)) {
       throw ArgumentError('Unsupported application action.');
     }
     final ref = db.collection('users').doc(uid).collection('application_operations').doc(operationId);

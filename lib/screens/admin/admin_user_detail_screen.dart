@@ -104,7 +104,9 @@ class _AccountDetailsState extends State<_AccountDetails> {
           admin: true, service: widget.driverService, showIdentity: false),
         Row(children: [
           Expanded(child: AppSectionHeader(user.displayName,
-            subtitle: user.accountType == 'driver' ? 'Account details and driver administration' : user.registrationStatus == null ? 'Read-only account details' : 'Account details and application review')),
+            subtitle: user.accountType == 'driver' ? 'Account details and driver administration'
+              : user.driverUpgradeStatus != null ? 'Account details and driver upgrade review'
+              : user.registrationStatus == null ? 'Read-only account details' : 'Account details and application review')),
           IconButton(tooltip: 'Refresh account',
             onPressed: _reload,
             icon: const Icon(Icons.refresh)),
@@ -116,7 +118,7 @@ class _AccountDetailsState extends State<_AccountDetails> {
               const SizedBox(height: 4),
               SelectableText('${entry.value ?? 'Not available'}', style: AppTextStyles.body),
             ]))).toList()),
-        if (user.registrationStatus != null) RegistrationApplicationPanel(key: ValueKey('application_$_revision'), uid: user.uid, admin: true, onChanged: _reload),
+        if (user.registrationStatus != null || user.driverUpgradeStatus != null) RegistrationApplicationPanel(key: ValueKey('application_$_revision'), uid: user.uid, admin: true, onChanged: _reload),
         if (!widget.paymentFocus && user.accountType == 'driver') DriverAdministrationPanel(key: ValueKey('driver_$_revision'), uid: user.uid, admin: true, service: widget.driverService),
       ]);
     });

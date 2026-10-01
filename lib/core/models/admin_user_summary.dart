@@ -18,14 +18,14 @@ class AdminUserSummary {
     this.phoneNumber, this.accountType, this.city, this.status,
     this.profilePhotoPath, this.completedTripsCount, this.cancelledTripsCount,
     this.cancellationRate, this.averageRating, this.ratingsCount,
-    this.verificationStatus, this.registrationStatus, this.createdAt, this.updatedAt, this.operationalLabel});
+    this.verificationStatus, this.registrationStatus, this.driverUpgradeStatus, this.createdAt, this.updatedAt, this.operationalLabel});
 
   final String? operationalLabel;
   String get statusLabel => operationalLabel ?? (status ?? 'Unknown status').toUpperCase();
 
   final String uid;
   final String? fullName, email, phoneNumber, accountType, city, status,
-    profilePhotoPath, verificationStatus, registrationStatus;
+    profilePhotoPath, verificationStatus, registrationStatus, driverUpgradeStatus;
   final int? completedTripsCount, cancelledTripsCount, ratingsCount;
   final double? cancellationRate, averageRating;
   final DateTime? createdAt, updatedAt;
@@ -33,7 +33,7 @@ class AdminUserSummary {
   factory AdminUserSummary.fromMap(String uid, Map<String, dynamic> data) {
     final verification = data['verification'];
     return AdminUserSummary(
-      uid: uid, registrationStatus: _text(data['registrationStatus']), operationalLabel: accountStatusLabel(data),
+      uid: uid, registrationStatus: _text(data['registrationStatus']), driverUpgradeStatus: _text(data['driverUpgradeStatus']), operationalLabel: accountStatusLabel(data),
       fullName: _text(data['fullName']), email: _text(data['email']),
       phoneNumber: _text(data['phoneNumber']), accountType: _text(data['accountType']),
       city: _text(data['city']), status: _text(data['status']),

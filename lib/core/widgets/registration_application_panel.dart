@@ -13,9 +13,10 @@ import 'driver_evidence_widgets.dart';
 import 'driver_administration_panel.dart';
 
 class RegistrationApplicationPanel extends StatefulWidget {
-  const RegistrationApplicationPanel({super.key, required this.uid, this.admin = false, this.service, this.evidenceService, this.images, this.onChanged});
+  const RegistrationApplicationPanel({super.key, required this.uid, this.admin = false, this.upgradeRequest = false, this.service, this.evidenceService, this.images, this.onChanged});
   final String uid;
   final bool admin;
+  final bool upgradeRequest;
   final RegistrationApplicationService? service;
   final DriverEvidenceService? evidenceService;
   final EvidenceImageService? images;
@@ -28,7 +29,7 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
   late final _service = widget.service ?? RegistrationApplicationService();
   late final _evidenceService = widget.evidenceService ?? DriverEvidenceService(registrationApplication: true);
   final _form = GlobalKey<FormState>();
-  final _fields = {for (final key in ['fullName', 'phoneNumber', 'city', 'vehicleNumber', 'operatingArea', 'availableAreas', 'nicNumber', 'drivingLicenceNumber']) key: TextEditingController()};
+  final _fields = {for (final key in ['fullName', 'phoneNumber', 'city', 'vehicleNumber', 'vehicleDetails', 'operatingArea', 'availableAreas', 'nicNumber', 'drivingLicenceNumber']) key: TextEditingController()};
   final _paths = <String, String>{}, _busyPhotos = <String>{}, _notReady = <String>{};
   RegistrationApplicationData? _data;
   final _history = <Map<String, dynamic>>[];
@@ -49,12 +50,14 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
     try {
       final data = await _service.load(widget.uid, admin: widget.admin);
       if (!mounted || generation != _generation) { return; }
+      final submitted = data.application?['profile'];
+      final submittedProfile = data.isUpgrade && submitted is Map ? submitted : const {};
       for (final entry in _fields.entries) {
         // Re-enter private numbers for corrections; never place complete identity in a status summary.
         entry.value.text = ['nicNumber', 'drivingLicenceNumber'].contains(entry.key)
-          ? '' : DriverAdministration.text(data.profile[entry.key], '');
+          ? '' : DriverAdministration.text(submittedProfile[entry.key] ?? data.profile[entry.key], '');
       }
-      setState(() { _data = data; _vehicle = data.profile['vehicleType'] is String ? data.profile['vehicleType'] as String : null;
+      setState(() { _data = data; _vehicle = DriverAdministration.text(submittedProfile['vehicleType'] ?? data.profile['vehicleType'], '');
         _history.addAll(data.history); _moreHistory = data.history.length == 20;
         _uncertain = false; _operationId = null; _signature = null; });
     } catch (_) { if (mounted && generation == _generation) { setState(() => _message = 'Application unavailable. Check your access and connection, then refresh.'); } }
@@ -89,22 +92,27 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
       await Scrollable.ensureVisible(first.context, duration: const Duration(milliseconds: 200), alignment: .2);
       return;
     }
+    final upgrade = _data!.isUpgrade;
+    final reuseNic = _data!.reusesNic;
     final error = validateApplicationSubmission(driver: driver, nic: _fields['nicNumber']!.text,
-      licence: _fields['drivingLicenceNumber']!.text, evidence: _paths, agreement: _accepted);
+      licence: _fields['drivingLicenceNumber']!.text, evidence: _paths, agreement: _accepted, reuseNic: reuseNic);
     if (error != null || _notReady.isNotEmpty) { setState(() => _message = error ?? 'Upload or remove the selected replacement photos.'); return; }
-    final profile = {for (final key in ['fullName', 'phoneNumber', 'city', if (driver) ...['vehicleNumber', 'operatingArea', 'availableAreas']]) key: _fields[key]!.text.trim(),
+    final profile = {for (final key in [if (!upgrade) ...['fullName', 'phoneNumber', 'city'],
+      if (driver) ...['vehicleNumber', 'operatingArea', 'availableAreas'], if (upgrade) 'vehicleDetails']) key: _fields[key]!.text.trim(),
       if (driver) 'vehicleType': _vehicle};
     final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
       title: const Text('Review application'), content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(driver ? 'Driver application' : 'Tourist/User application'),
+          Text(upgrade ? 'Driver / Partner upgrade — same account' : driver ? 'Driver application' : 'Tourist/User application'),
           for (final entry in profile.entries) Text('${entry.key}: ${entry.value}'),
-          Text('Required photos ready: ${requiredApplicationEvidence(driver).length}'),
+          Text('Required new photos ready: ${requiredApplicationEvidence(driver).length - (reuseNic ? 1 : 0)}'),
+          if (reuseNic) const Text('Your verified NIC and original evidence revision will be reused.'),
           const Text('Please check your details and photo previews. Submission starts manual review and does not approve your account.'),
         ])), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Back to edit')),
           FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Submit Application'))]));
     if (!mounted || confirmed != true || !_enabled) { return; }
-    await _perform('submit_application', {'profile': profile, 'nicNumber': _fields['nicNumber']!.text.trim(),
+    await _perform(upgrade ? 'submit_driver_upgrade' : 'submit_application', {'profile': profile,
+      if (!reuseNic) 'nicNumber': _fields['nicNumber']!.text.trim(),
       if (driver) 'drivingLicenceNumber': _fields['drivingLicenceNumber']!.text.trim(), 'evidence': Map<String, String>.from(_paths),
       'agreementVersion': registrationAgreementVersion, 'agreementAccepted': true});
   }
@@ -155,17 +163,35 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
     final data = _data;
     if (_loading) { return const Center(child: CircularProgressIndicator()); }
     if (data == null) { return Column(children: [Text(_message ?? 'Application unavailable.'), TextButton(onPressed: _load, child: const Text('Refresh application'))]); }
+    if (widget.upgradeRequest && !widget.admin && !data.isUpgrade && data.profile['accountType'] == 'tourist') {
+      return AppInfoCard(children: [
+        const AppSectionHeader('Become a Driver / Partner'),
+        const Text('Use your existing Ceylon Travel account. Your Tourist account remains unchanged while your driver application is reviewed.'),
+        const Text('Prepare your Driving Licence, a fresh driver selfie, primary vehicle details and operating areas. Verified NIC information can be reused from your approved application.'),
+        const Text('Approval is followed by registration payment verification and membership activation. Submitting does not grant driver access.'),
+        if (_message != null) Text(_message!),
+        if (_saving) const LinearProgressIndicator(),
+        if (data.pendingOperation || _uncertain) const Text('An application action may still be queued. Refresh before continuing.'),
+        if (eligibleForDriverUpgrade(data.profile)) FilledButton(
+          key: const ValueKey('startDriverUpgrade'), onPressed: _enabled ? () => _perform('start_driver_upgrade', {}) : null,
+          child: const Text('Start upgrade application'))
+        else const Text('Your Tourist account must be approved and active before requesting an upgrade.'),
+        TextButton(onPressed: _saving ? null : _load, child: const Text('Refresh application')),
+      ]);
+    }
     if (data.status == 'legacy') {
       return const Text('This account uses the existing registration workflow. Contact support if your account is unavailable.');
     }
-    final driver = data.profile['accountType'] == 'driver';
+    final driver = data.isUpgrade || data.profile['accountType'] == 'driver';
+    final vehicleTypes = data.isUpgrade ? driverUpgradeVehicleTypes : BidService.vehicleTypes;
     final app = data.application ?? {};
     final editable = !widget.admin && ['draft', 'correction_required', 'rejected'].contains(data.status);
     return AppInfoCard(children: [
-      Row(children: [const Expanded(child: AppSectionHeader('Registration application')),
+      Row(children: [Expanded(child: AppSectionHeader(data.isUpgrade ? 'Driver / Partner upgrade' : 'Registration application')),
         IconButton(onPressed: _saving || _busyPhotos.isNotEmpty ? null : _load, tooltip: 'Refresh application', icon: const Icon(Icons.refresh))]),
       Text('Status: ${data.status.replaceAll('_', ' ')}'), Text('Application revision: ${data.revision}'),
       Text('Account status: ${data.profile['accountStatus'] ?? 'Not available'}'),
+      if (data.isUpgrade) const Text('Purpose: Tourist → Driver upgrade. Your existing account and its access remain unchanged until a trusted transition.'),
       if (_saving) const LinearProgressIndicator(),
       if (_message != null) Text(_message!),
       if (app['reason'] is String) Text('Review reason: ${app['reason']}'),
@@ -181,25 +207,39 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
       if (app['evidence'] is List) DriverEvidenceReview(uid: widget.uid, evidence: app['evidence'] as List, service: _evidenceService),
       if (widget.admin && data.status == 'pending_review') Wrap(spacing: 8, children: [
         for (final item in const {'approve': 'Approve application', 'reject': 'Reject application', 'request_correction': 'Request correction'}.entries)
-          OutlinedButton(onPressed: _enabled ? () => _review(item.key, item.value) : null, child: Text(item.value)),
+          if (!data.isUpgrade || item.key != 'approve') OutlinedButton(onPressed: _enabled ? () => _review(item.key, item.value) : null, child: Text(item.value)),
       ]),
+      if (widget.admin && data.isUpgrade && data.status == 'pending_review')
+        const Text('Upgrade approval and the trusted account-type transition are reserved for Stage 13C. You can request correction or reject with a reason.'),
       if (editable) Form(key: _form, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (data.status != 'draft') const Text(registrationResubmissionMessage),
         const Text('Basic information'),
-        _input('fullName', 'Full name'), _input('phoneNumber', 'Phone number'), _input('city', 'City / District'),
+        if (data.isUpgrade) ...[
+          Text('Full name: ${data.profile['fullName'] ?? ''}'),
+          Text('Phone number: ${data.profile['phoneNumber'] ?? ''}'),
+          Text('City / District: ${data.profile['city'] ?? ''}'),
+          const Text('To change contact details, use Profile & Account Settings.'),
+        ] else ...[_input('fullName', 'Full name'), _input('phoneNumber', 'Phone number'), _input('city', 'City / District')],
         Text('Login email: ${data.profile['email'] ?? ''}'),
         if (driver) ...[
-          DropdownButtonFormField<String>(initialValue: BidService.vehicleTypes.contains(_vehicle) ? _vehicle : null,
+          DropdownButtonFormField<String>(initialValue: vehicleTypes.contains(_vehicle) ? _vehicle : null,
             isExpanded: true, decoration: const InputDecoration(labelText: 'Vehicle type'),
-            items: [for (final type in BidService.vehicleTypes) DropdownMenuItem(value: type, child: Text(type))],
+            items: [for (final type in vehicleTypes) DropdownMenuItem(value: type, child: Text(type))],
             onChanged: _enabled ? (value) => setState(() => _vehicle = value) : null,
             validator: (value) => value == null ? 'Choose a vehicle type.' : null),
           _input('vehicleNumber', 'Vehicle number'), _input('operatingArea', 'Operating area'), _input('availableAreas', 'Available areas'),
+          if (data.isUpgrade) ...[
+            _input('vehicleDetails', 'Vehicle make / model and details'),
+            const Text('This is your informational default vehicle. It does not restrict the vehicle type you may later offer on a bid.'),
+          ],
         ],
         const AppSectionHeader('Identity information'),
-        _input('nicNumber', 'NIC number'), if (driver) _input('drivingLicenceNumber', 'Driving Licence number'),
+        if (data.reusesNic) const Text('Your verified NIC and its original evidence are reused securely. Contact support if your NIC needs correction.')
+        else _input('nicNumber', 'NIC number'),
+        if (driver) _input('drivingLicenceNumber', 'Driving Licence number'),
         const Text('These details and photos are private and used for manual verification. All photos below are required.'),
-        for (final type in EvidenceType.values.where((t) => t != EvidenceType.paymentSlip && (driver || t != EvidenceType.drivingLicence)))
+        for (final type in EvidenceType.values.where((t) => t != EvidenceType.paymentSlip && (driver || t != EvidenceType.drivingLicence)
+          && (!data.reusesNic || t != EvidenceType.nic)))
           DriverEvidenceUpload(key: ValueKey('application_${data.revision}_${type.stored}'), uid: widget.uid, revision: data.revision + 1,
             type: type, enabled: _enabled, service: _evidenceService, images: widget.images,
             onChange: (path) => setState(() { if (path == null) { _paths.remove(type.stored); } else { _paths[type.stored] = path; } }),
@@ -208,15 +248,18 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
               if (ready) { _notReady.remove(type.stored); } else { _notReady.add(type.stored); }
             })),
         const AppSectionHeader('Registration Guidelines & Agreement'),
-        const Text('Version 1.0 — application guidelines'),
+        const Text('Version $registrationAgreementVersion — registration guidelines and platform terms'),
+        const Text('These terms are not presented as a lawyer-reviewed final legal contract.'),
         for (final guideline in registrationGuidelines) Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text('• $guideline')),
         CheckboxListTile(key: const ValueKey('registrationAgreement'), contentPadding: EdgeInsets.zero, value: _accepted,
           onChanged: _enabled ? (value) => setState(() => _accepted = value ?? false) : null,
-          title: const Text('I confirm my information is accurate and accept these guidelines and manual verification.')),
+          title: const Text('I confirm my information is accurate and accept these guidelines, platform terms and manual verification.')),
         FilledButton(key: const ValueKey('reviewApplication'), onPressed: _enabled ? () => _submit(driver) : null,
           child: const Text('Review application')),
       ])),
-      if (!widget.admin && driver && data.status == 'approved') ...[
+      if (!widget.admin && data.isUpgrade && data.status == 'approved' && data.profile['accountType'] != 'driver')
+        const Text('Approved — trusted account transition, payment verification and membership activation are still required.'),
+      if (!widget.admin && data.profile['accountType'] == 'driver' && data.status == 'approved') ...[
         if (!driverCanBid(data.profile)) Text(driverActivationMessage(data.profile)),
         DriverAdministrationPanel(key: ValueKey('membership_${data.revision}'), uid: widget.uid, admin: false),
       ],
@@ -226,7 +269,9 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
           subtitle: Text('${event['previousValue']} → ${event['newValue']}\n'
             '${DriverAdministration.display(event['createdAt'])}\n'
             '${event['reason'] ?? ''}${widget.admin ? '\nActor: ${event['actorUid']}' : ''}'),
-          onTap: event['applicationRevision'] is int && !_saving ? () => _readHistory(revision: event['applicationRevision'] as int) : null),
+          onTap: event['action'] != 'driver_upgrade_started' && event['applicationRevision'] is int
+            && (event['applicationRevision'] as int) > 0 && !_saving
+            ? () => _readHistory(revision: event['applicationRevision'] as int) : null),
         if (_moreHistory) TextButton(onPressed: _saving ? null : _readHistory, child: const Text('Load earlier history')),
       ]),
       if (_historicalSubmission case final submission?) AppInfoCard(children: [

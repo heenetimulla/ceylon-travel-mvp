@@ -66,6 +66,7 @@ class ProfileService {
   bool _invalidated = false;
   Stream<String?> get sessionChanges => _session.changes;
   bool get hasSession => !_invalidated && _uid != null && _session.uid == _uid;
+  String? get currentUid => hasSession ? _uid : null;
   void _checkSession() {
     if (!hasSession) {
       throw const ProfileException('Your session changed. Reopen settings after signing in.');

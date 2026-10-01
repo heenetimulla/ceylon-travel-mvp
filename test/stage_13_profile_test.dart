@@ -144,6 +144,10 @@ void main() {
     expect(legacy.registrationNumber, 'Not assigned');
     expect(legacy.membershipExpiry, 'Not available');
   });
+  test('malformed existing upgrade summary never offers another new request', () {
+    final profile = AccountProfile({...store.data, 'status': 'active', 'driverUpgradeStatus': 42}, loginEmail: session.email);
+    expect(profile.canRequestDriverUpgrade, isFalse);
+  });
   for (final width in [360.0, 1400.0]) {
     testWidgets('driver trusted fields are read-only at $width', (tester) async {
       tester.view.physicalSize = Size(width, 900);
@@ -279,4 +283,29 @@ void main() {
     expect(find.text('Sign in again to view your profile.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  for (final accountType in ['tourist', 'driver']) {
+    testWidgets('$accountType profile shows the upgrade entry only for eligible Tourists', (tester) async {
+      store.data.addAll({'status': 'active', 'accountType': accountType});
+      await tester.pumpWidget(MaterialApp(home: ProfileSettingsScreen(service: service)));
+      await tester.pump();
+      if (accountType == 'tourist') {
+        await reveal(tester, find.text('Become a Driver / Partner'));
+        expect(find.text('Become a Driver / Partner'), findsOneWidget);
+      } else {
+        await reveal(tester, find.text('Driver registration number'));
+        expect(find.text('Become a Driver / Partner'), findsNothing);
+      }
+    });
+  }
+  for (final status in ['draft', 'pending_review', 'correction_required', 'rejected', 'approved']) {
+    testWidgets('existing upgrade $status shows status instead of duplicate entry', (tester) async {
+      store.data.addAll({'status': 'active', 'driverUpgradeStatus': status});
+      await tester.pumpWidget(MaterialApp(home: ProfileSettingsScreen(service: service)));
+      await tester.pump();
+      await reveal(tester, find.text('View driver upgrade'));
+      expect(find.text('Become a Driver / Partner'), findsNothing);
+      expect(find.text(status == 'approved' ? 'Approved — payment/membership activation required'
+        : 'Driver upgrade: ${status.replaceAll('_', ' ')}'), findsOneWidget);
+    });
+  }
 }

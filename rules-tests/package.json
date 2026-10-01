@@ -6,7 +6,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=1 lifecycle.test.mjs fcm_tokens.test.mjs profile_settings.test.mjs"
+    "test": "node --test --test-concurrency=1 lifecycle.test.mjs fcm_tokens.test.mjs profile_settings.test.mjs driver_upgrade.test.mjs",
+    "test:upgrade-storage": "node --test --test-concurrency=1 driver_upgrade_storage.test.mjs"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "5.0.0",

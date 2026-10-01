@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/models/account_profile.dart';
 import '../../core/services/profile_service.dart';
 import '../../core/widgets/app_components.dart';
+import 'registration_application_screen.dart';
 
 class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({super.key, this.service});
@@ -39,6 +40,13 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   void _reload() {
     final future = _service.load();
     setState(() { _profile = future; });
+  }
+  Future<void> _openUpgrade() async {
+    final uid = _service.currentUid;
+    if (uid == null) { return; }
+    await Navigator.push(context, MaterialPageRoute<void>(builder: (_) =>
+      RegistrationApplicationScreen(uid: uid, upgradeRequest: true)));
+    if (mounted && _service.hasSession) { _reload(); }
   }
   Future<void> _edit(AccountProfile profile, {required bool phone}) async {
     final saved = await showDialog<bool>(context: context, barrierDismissible: false,
@@ -107,6 +115,15 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             const AppSectionHeader('Account status', subtitle: 'Managed through your application and account review.'),
             _field('Registration', profile.registrationStatus.replaceAll('_', ' ')),
             _field('Account', profile.accountStatus.replaceAll('_', ' ')),
+          ]),
+          if (profile.canRequestDriverUpgrade || profile.driverUpgradeStatus != null) AppInfoCard(children: [
+            const AppSectionHeader('Driver / Partner upgrade'),
+            if (profile.driverUpgradeStatus case final status?)
+              Text(status == 'approved' ? 'Approved — payment/membership activation required'
+                : 'Driver upgrade: ${status.replaceAll('_', ' ')}')
+            else const Text('Apply using your existing account. Driver review, payment verification and membership activation are required before driving.'),
+            OutlinedButton(onPressed: _openUpgrade, child: Text(profile.canRequestDriverUpgrade
+              ? 'Become a Driver / Partner' : 'View driver upgrade')),
           ]),
           if (profile.isDriver) AppInfoCard(children: [
             const AppSectionHeader('Driver membership & vehicle', subtitle: 'Verification and membership details are read-only.'),

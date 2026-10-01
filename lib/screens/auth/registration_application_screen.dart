@@ -7,8 +7,9 @@ import 'session_navigation.dart';
 import 'account_screen.dart';
 
 class RegistrationApplicationScreen extends StatefulWidget {
-  const RegistrationApplicationScreen({super.key, required this.uid});
+  const RegistrationApplicationScreen({super.key, required this.uid, this.upgradeRequest = false});
   final String uid;
+  final bool upgradeRequest;
   @override
   State<RegistrationApplicationScreen> createState() => _RegistrationApplicationScreenState();
 }
@@ -32,12 +33,12 @@ class _RegistrationApplicationScreenState extends State<RegistrationApplicationS
   }
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: const AppPageAppBar(title: Text('Registration & verification'), actions: [LogoutButton()]),
+    appBar: AppPageAppBar(title: Text(widget.upgradeRequest ? 'Driver / Partner upgrade' : 'Registration & verification'), actions: const [LogoutButton()]),
     body: StreamBuilder<String?>(stream: _session, builder: (context, snapshot) {
       if (snapshot.connectionState == ConnectionState.waiting) { return const Center(child: CircularProgressIndicator()); }
       if (snapshot.hasError || snapshot.data != widget.uid) { return const Center(child: Text('Sign in to view your application.')); }
       return ListView(padding: appPagePadding(context), children: [
-        RegistrationApplicationPanel(key: ValueKey(widget.uid), uid: widget.uid, service: _service),
+        RegistrationApplicationPanel(key: ValueKey(widget.uid), uid: widget.uid, service: _service, upgradeRequest: widget.upgradeRequest),
         OutlinedButton(onPressed: _checking ? null : _continue, child: const Text('Check approval and continue')),
         TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const SupportFormScreen())), child: const Text('Contact support')),
         TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AccountScreen())), child: const Text('Account & Support')),

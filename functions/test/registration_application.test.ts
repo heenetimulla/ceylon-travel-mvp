@@ -59,11 +59,11 @@ function payload(uid: string, driver = false, revision = 1): DocumentData {
   nicNumber: '901234567V', ...(driver ? {drivingLicenceNumber: 'B1234567'} : {}),
   evidence: Object.fromEntries((driver ? ['nic', 'driving_licence', 'selfie'] : ['nic', 'selfie'])
     .map((type) => [type, `registration_evidence/${uid}/${revision}/${type}/${'a'.repeat(32)}.jpg`])),
-  agreementVersion: '1.0', agreementAccepted: true};
+  agreementVersion: '1.1', agreementAccepted: true};
 }
 function enqueue(store: Store, uid: string, id: string, action: string, data: DocumentData = {}, actor = uid, reason = '', revision?: number) {
   store.docs.set(`users/${uid}/application_operations/${id}`, {actorUid: actor, action, payload: data, reason,
-    status: 'pending', expectedRevision: revision ?? store.docs.get(`users/${uid}`)!.applicationRevision});
+    status: 'pending', expectedRevision: revision ?? store.docs.get(`users/${uid}`)!.applicationRevision ?? 0});
   store.revision++;
 }
 async function run(store: Store, uid: string, id: string) {
@@ -82,7 +82,7 @@ test('Tourist and driver submission store trusted agreement, required evidence a
     const user = store.docs.get('users/owner')!, app = store.docs.get('registration_applications/owner')!;
     assert.equal(user.registrationStatus, 'pending_review'); assert.equal(user.accountStatus, 'pending_approval');
     assert.equal(user.applicationRevision, 1); assert.equal(user.nicNumber, undefined); assert.equal(user.evidence, undefined);
-    assert.equal(app.agreementVersion, '1.0'); assert.ok(app.agreementAcceptedAt.isEqual(store.commitTime));
+    assert.equal(app.agreementVersion, '1.1'); assert.ok(app.agreementAcceptedAt.isEqual(store.commitTime));
     assert.ok(user.applicationSubmittedAt instanceof Timestamp);
     assert.ok(user.applicationSubmittedAt.isEqual(app.submittedAt));
     assert.ok(user.applicationSubmittedAt.isEqual(store.docs.get('registration_applications/owner/history/submit')!.createdAt));
@@ -214,4 +214,192 @@ test('Concurrent review and delivery retries preserve one approval transition an
     path.startsWith('registration_applications/owner/history/') && value.action === 'application_approved').length, 1);
   assert.deepEqual(store.docs.get('registration_applications/owner/submissions/1'), original);
   assert.equal(store.docs.get('users/owner')!.accountStatus, 'active');
+});
+
+async function approvedTourist(store: Store, uid = 'owner', nic = '901234567V') {
+  applicant(store, uid);
+  const initial = payload(uid); initial.nicNumber = nic;
+  enqueue(store, uid, 'original', 'submit_application', initial);
+  assert.equal((await run(store, uid, 'original')).status, 'succeeded');
+  // An existing v1.0 acceptance must remain reviewable and immutable after rollout.
+  for (const path of [`registration_applications/${uid}`, `registration_applications/${uid}/submissions/1`]) {
+    store.docs.set(path, {...store.docs.get(path), agreementVersion: '1.0'});
+  }
+  enqueue(store, uid, 'original-review', 'approve', {}, 'admin');
+  assert.equal((await run(store, uid, 'original-review')).status, 'succeeded');
+}
+async function beginUpgrade(store: Store, uid = 'owner') {
+  enqueue(store, uid, 'upgrade-draft', 'start_driver_upgrade');
+  return run(store, uid, 'upgrade-draft');
+}
+function upgradePayload(uid = 'owner', revision = 2): DocumentData {
+  return {profile: {vehicleType: 'Any', vehicleNumber: 'ABC-1234', vehicleDetails: 'Toyota sedan, four seats',
+    operatingArea: 'Colombo', availableAreas: 'Western'}, drivingLicenceNumber: 'B1234567',
+    evidence: Object.fromEntries(['driving_licence', 'selfie'].map(type =>
+      [type, `registration_evidence/${uid}/${revision}/${type}/${'b'.repeat(32)}.jpg`])),
+    agreementVersion: '1.1', agreementAccepted: true};
+}
+
+test('Same-UID driver upgrade draft/submission preserves Tourist access, v1.0 history and verified NIC source', async () => {
+  const store = new Store(); await approvedTourist(store);
+  const original = store.docs.get('registration_applications/owner/submissions/1');
+  const originalUser = store.docs.get('users/owner')!;
+  assert.equal((await beginUpgrade(store)).status, 'succeeded');
+  assert.equal(store.docs.get('users/owner')!.driverUpgradeStatus, 'draft');
+  assert.equal(store.docs.get('registration_applications/owner')!.identitySourceRevision, 1);
+  enqueue(store, 'owner', 'upgrade-submit', 'submit_driver_upgrade', upgradePayload());
+  assert.equal((await run(store, 'owner', 'upgrade-submit')).status, 'succeeded');
+  const user = store.docs.get('users/owner')!, app = store.docs.get('registration_applications/owner')!;
+  assert.equal(user.uid, 'owner'); assert.equal(user.accountType, 'tourist');
+  assert.equal(user.registrationStatus, 'approved'); assert.equal(user.accountStatus, 'active');
+  assert.equal(user.identityVerificationStatus, 'verified'); assert.equal(user.driverUpgradeStatus, 'pending_review');
+  assert.equal(user.applicationRevision, 2);
+  for (const field of ['phoneNumber', 'fullName', 'email', 'averageRating', 'completedTripsCount', 'applicationSubmittedAt']) {
+    assert.deepEqual(user[field], originalUser[field]);
+  }
+  for (const field of ['paymentStatus', 'membershipPlan', 'membershipStatus', 'driverRegistrationNumber', 'nicNumber', 'vehicleType']) {
+    assert.equal(user[field], undefined);
+  }
+  assert.equal(app.purpose, 'driver_upgrade'); assert.equal(app.targetAccountType, 'driver');
+  assert.equal(app.accountType, 'tourist'); assert.equal(app.agreementVersion, '1.1');
+  assert.ok(app.agreementAcceptedAt.isEqual(app.submittedAt));
+  const nic = app.evidence.find((e: DocumentData) => e.evidenceType === 'nic');
+  assert.equal(nic.reusedFromApplicationRevision, 1); assert.equal(nic.applicationRevision, 1);
+  assert.ok(nic.storagePath.startsWith('registration_evidence/owner/1/nic/'));
+  for (const type of ['selfie', 'driving_licence']) {
+    assert.equal(app.evidence.find((e: DocumentData) => e.evidenceType === type).applicationRevision, 2);
+  }
+  assert.deepEqual(store.docs.get('registration_applications/owner/submissions/1'), original);
+  assert.equal(store.docs.has('driver_verifications/owner'), false);
+  assert.equal([...store.docs.keys()].filter(k => /^users\/[^/]+$/.test(k)).length, 1);
+  assert.equal(store.docs.has('system_config/driver_registration_counter'), false);
+  await run(store, 'owner', 'upgrade-submit');
+  assert.equal([...store.docs.keys()].filter(k => k === 'registration_applications/owner/history/upgrade-submit').length, 1);
+});
+
+test('Concurrent draft creation and duplicate submission are safe; existing drivers and inactive applicants cannot upgrade', async () => {
+  const store = new Store(); await approvedTourist(store);
+  enqueue(store, 'owner', 'draft-a', 'start_driver_upgrade'); enqueue(store, 'owner', 'draft-b', 'start_driver_upgrade');
+  const results = await Promise.all([run(store, 'owner', 'draft-a'), run(store, 'owner', 'draft-b')]);
+  assert.equal(results.filter(r => r.status === 'succeeded').length, 1);
+  assert.equal(results.filter(r => r.errorCode === 'upgrade-locked').length, 1);
+  enqueue(store, 'owner', 'send-a', 'submit_driver_upgrade', upgradePayload());
+  assert.equal((await run(store, 'owner', 'send-a')).status, 'succeeded');
+  enqueue(store, 'owner', 'send-b', 'submit_driver_upgrade', upgradePayload('owner', 3));
+  assert.equal((await run(store, 'owner', 'send-b')).errorCode, 'submission-locked');
+  for (const patch of [{accountType: 'driver'}, {accountStatus: 'suspended'}, {registrationStatus: 'pending_review'}]) {
+    const denied = new Store(); await approvedTourist(denied);
+    denied.docs.set('users/owner', {...denied.docs.get('users/owner'), ...patch});
+    assert.equal((await beginUpgrade(denied)).status, 'failed');
+  }
+});
+
+test('Upgrade requires new DL/selfie, vehicle data, licence and current agreement; cannot forge profile/admin fields', async () => {
+  const mutations = [
+    (p: DocumentData) => { delete p.drivingLicenceNumber; },
+    (p: DocumentData) => { delete p.evidence.driving_licence; },
+    (p: DocumentData) => { delete p.evidence.selfie; },
+    (p: DocumentData) => { p.evidence.selfie = `registration_evidence/owner/1/selfie/${'a'.repeat(32)}.jpg`; },
+    (p: DocumentData) => { p.agreementVersion = '1.0'; },
+    (p: DocumentData) => { p.agreementAccepted = false; },
+    (p: DocumentData) => { p.nicNumber = '199923456789'; },
+    ...['vehicleType', 'vehicleNumber', 'vehicleDetails', 'operatingArea', 'availableAreas'].map(field =>
+      (p: DocumentData) => { delete p.profile[field]; }),
+    ...['accountType', 'accountStatus', 'fullName', 'phoneNumber', 'email', 'paymentStatus', 'membershipPlan', 'driverRegistrationNumber'].map(field =>
+      (p: DocumentData) => { p.profile[field] = 'forged'; }),
+    (p: DocumentData) => { p.reviewedBy = 'admin'; },
+    (p: DocumentData) => { p.identitySourceRevision = 0; },
+  ];
+  for (const mutate of mutations) {
+    const store = new Store(); await approvedTourist(store); await beginUpgrade(store);
+    const data = upgradePayload(); mutate(data);
+    enqueue(store, 'owner', 'bad', 'submit_driver_upgrade', data);
+    assert.equal((await run(store, 'owner', 'bad')).status, 'failed');
+    assert.equal(store.docs.get('users/owner')!.driverUpgradeStatus, 'draft');
+    assert.equal(store.docs.has('registration_applications/owner/submissions/2'), false);
+  }
+});
+
+test('Correction/rejection resubmits a new immutable upgrade revision without altering the Tourist account', async () => {
+  for (const action of ['reject', 'request_correction']) {
+    const store = new Store(); await approvedTourist(store); await beginUpgrade(store);
+    enqueue(store, 'owner', 'upgrade-submit', 'submit_driver_upgrade', upgradePayload());
+    await run(store, 'owner', 'upgrade-submit');
+    const original = store.docs.get('registration_applications/owner/submissions/2');
+    enqueue(store, 'owner', 'no-reason', action, {}, 'admin');
+    assert.equal((await run(store, 'owner', 'no-reason')).status, 'failed');
+    enqueue(store, 'owner', 'review', action, {}, 'admin', 'Please replace the licence image.');
+    assert.equal((await run(store, 'owner', 'review')).status, 'succeeded');
+    const app = store.docs.get('registration_applications/owner')!;
+    assert.equal(app.reason, 'Please replace the licence image.');
+    assert.equal(app.registrationStatus, action === 'reject' ? 'rejected' : 'correction_required');
+    enqueue(store, 'owner', 'resubmit-upgrade', 'submit_driver_upgrade', upgradePayload('owner', 3));
+    assert.equal((await run(store, 'owner', 'resubmit-upgrade')).status, 'succeeded');
+    assert.equal(store.docs.get('users/owner')!.driverUpgradeStatus, 'pending_review');
+    assert.equal(store.docs.get('users/owner')!.applicationRevision, 3);
+    assert.equal(store.docs.get('users/owner')!.accountStatus, 'active');
+    assert.equal(store.docs.get('users/owner')!.registrationStatus, 'approved');
+    assert.deepEqual(store.docs.get('registration_applications/owner/submissions/2'), original);
+    assert.equal(store.docs.get('registration_applications/owner/submissions/1')!.agreementVersion, '1.0');
+    enqueue(store, 'owner', 'stale', 'request_correction', {}, 'admin', 'Stale review', 2);
+    assert.equal((await run(store, 'owner', 'stale')).errorCode, 'stale-state');
+  }
+});
+
+test('Upgrade approval/transition is reserved for Stage 13C; applicant and support cannot decide', async () => {
+  const store = new Store(); await approvedTourist(store); await beginUpgrade(store);
+  enqueue(store, 'owner', 'upgrade-submit', 'submit_driver_upgrade', upgradePayload()); await run(store, 'owner', 'upgrade-submit');
+  for (const actor of ['owner', 'stranger', 'support-only', 'admin']) {
+    enqueue(store, 'owner', `approval-${actor}`, 'approve', {}, actor);
+    assert.equal((await run(store, 'owner', `approval-${actor}`)).errorCode,
+      actor === 'admin' ? 'upgrade-approval-unavailable' : 'permission-denied');
+  }
+  assert.equal(store.docs.get('users/owner')!.accountType, 'tourist');
+  assert.equal(store.docs.get('users/owner')!.membershipStatus, undefined);
+  enqueue(store, 'owner', 'forged-owner', 'submit_driver_upgrade', upgradePayload(), 'stranger');
+  assert.equal((await run(store, 'owner', 'forged-owner')).errorCode, 'permission-denied');
+});
+
+test('Upgrade DL claims are globally unique under concurrent submissions and do not leak the conflicting UID', async () => {
+  const store = new Store(); await approvedTourist(store, 'one'); await approvedTourist(store, 'two', '199923456789');
+  await beginUpgrade(store, 'one'); await beginUpgrade(store, 'two');
+  enqueue(store, 'one', 'send', 'submit_driver_upgrade', upgradePayload('one'));
+  enqueue(store, 'two', 'send', 'submit_driver_upgrade', upgradePayload('two'));
+  const results = await Promise.all([run(store, 'one', 'send'), run(store, 'two', 'send')]);
+  assert.equal(results.filter(r => r.status === 'succeeded').length, 1);
+  const denied = results.find(r => r.status === 'failed')!;
+  assert.equal(denied.errorCode, 'identity-unavailable');
+  assert.match(denied.errorMessage, /Driving Licence/);
+  assert.ok(!denied.errorMessage.includes('one') && !denied.errorMessage.includes('two'));
+});
+
+test('NIC reuse verifies original registry ownership; legacy without approved identity must submit NIC evidence', async () => {
+  const store = new Store(); await approvedTourist(store); await beginUpgrade(store);
+  const source = store.docs.get('registration_applications/owner/submissions/1')!;
+  store.docs.set(`identity_registry/${source.nicRegistryKey}`, {uid: 'secret-other-account'});
+  enqueue(store, 'owner', 'send', 'submit_driver_upgrade', upgradePayload());
+  const result = await run(store, 'owner', 'send');
+  assert.equal(result.errorCode, 'identity-unavailable'); assert.ok(!result.errorMessage.includes('secret-other-account'));
+  const legacy = new Store(); applicant(legacy, 'owner');
+  const user = legacy.docs.get('users/owner')!; delete user.registrationStatus; delete user.applicationRevision; delete user.accountStatus;
+  assert.equal((await beginUpgrade(legacy)).status, 'succeeded');
+  const data = upgradePayload('owner', 1); data.nicNumber = '901234567V';
+  data.evidence.nic = `registration_evidence/owner/1/nic/${'a'.repeat(32)}.jpg`;
+  enqueue(legacy, 'owner', 'legacy-send', 'submit_driver_upgrade', data);
+  assert.equal((await run(legacy, 'owner', 'legacy-send')).status, 'succeeded');
+  assert.equal(legacy.docs.get('users/owner')!.registrationStatus, undefined);
+  assert.equal(legacy.docs.get('registration_applications/owner')!.evidence.length, 3);
+});
+
+test('malformed approval values and mismatched upgrade head fail closed', async () => {
+  for (const patch of [{registrationStatus: null}, {accountStatus: null}]) {
+    const store = new Store(); await approvedTourist(store);
+    store.docs.set('users/owner', {...store.docs.get('users/owner'), ...patch});
+    assert.equal((await beginUpgrade(store)).status, 'failed');
+  }
+  const store = new Store(); await approvedTourist(store); await beginUpgrade(store);
+  store.docs.set('registration_applications/owner', {...store.docs.get('registration_applications/owner'), applicationRevision: 0});
+  enqueue(store, 'owner', 'mismatch', 'submit_driver_upgrade', upgradePayload());
+  assert.equal((await run(store, 'owner', 'mismatch')).errorCode, 'stale-state');
+  assert.equal(store.docs.has('registration_applications/owner/submissions/2'), false);
 });
