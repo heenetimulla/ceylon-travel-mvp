@@ -97,3 +97,19 @@ test('private upgrade and immutable history are owner/admin-readable but never c
   await assertFails(setDoc(doc(db(), 'identity_registry/fake'), {uid: 'owner'}));
   await assertFails(setDoc(doc(db(), 'system_config/driver_registration_counter'), {nextRegistrationNumber: 1}));
 });
+
+test('primary admin queues upgrade approval but no client can perform the trusted account transition', async () => {
+  await state('pending_review');
+  const admin = db('admin', {admin: true});
+  await assertSucceeds(setDoc(doc(admin, 'users/owner/application_operations/approve-upgrade'),
+    {...command('approve'), actorUid: 'admin'}));
+  for (const client of [db(), db('other'), db('support', {supportAdmin: true}), admin]) {
+    await assertFails(updateDoc(doc(client, 'users/owner'), {
+      accountType: 'driver', driverUpgradeStatus: 'approved', identityVerificationStatus: 'verified',
+      accountStatus: 'pending_approval', paymentStatus: 'pending', membershipStatus: 'pending', updatedAt: serverTimestamp(),
+    }));
+    await assertFails(setDoc(doc(client, 'users/owner/admin_history/forged-approval'), {
+      action: 'driver_upgrade_approved', actorUid: 'admin', applicationRevision: 1,
+    }));
+  }
+});

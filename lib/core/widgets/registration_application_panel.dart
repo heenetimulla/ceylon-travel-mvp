@@ -122,6 +122,8 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
     final approved = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: Text(label),
       content: SingleChildScrollView(child: Form(key: form, child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Text('Review the current private documents and information before confirming. Driver payment and membership remain separate.'),
+        if (action == 'approve' && _data?.isUpgrade == true)
+          const Text('The same account will become a Driver / Partner account. Approval verifies the submitted identity; payment verification and membership activation are still required before driver access.'),
         if (action != 'approve') TextFormField(onChanged: (value) => reason = value, maxLength: 500, decoration: const InputDecoration(labelText: 'Reason shown to applicant'),
           validator: (value) => value == null || value.trim().isEmpty ? 'A reason is required.' : null),
       ]))), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
@@ -191,7 +193,9 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
         IconButton(onPressed: _saving || _busyPhotos.isNotEmpty ? null : _load, tooltip: 'Refresh application', icon: const Icon(Icons.refresh))]),
       Text('Status: ${data.status.replaceAll('_', ' ')}'), Text('Application revision: ${data.revision}'),
       Text('Account status: ${data.profile['accountStatus'] ?? 'Not available'}'),
-      if (data.isUpgrade) const Text('Purpose: Tourist → Driver upgrade. Your existing account and its access remain unchanged until a trusted transition.'),
+      if (data.isUpgrade) Text(data.status == 'approved'
+        ? 'Driver upgrade approved. Complete payment verification and membership activation before operational driver access.'
+        : 'Purpose: Tourist → Driver upgrade. Your existing account and its access remain unchanged until a trusted transition.'),
       if (_saving) const LinearProgressIndicator(),
       if (_message != null) Text(_message!),
       if (app['reason'] is String) Text('Review reason: ${app['reason']}'),
@@ -207,10 +211,10 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
       if (app['evidence'] is List) DriverEvidenceReview(uid: widget.uid, evidence: app['evidence'] as List, service: _evidenceService),
       if (widget.admin && data.status == 'pending_review') Wrap(spacing: 8, children: [
         for (final item in const {'approve': 'Approve application', 'reject': 'Reject application', 'request_correction': 'Request correction'}.entries)
-          if (!data.isUpgrade || item.key != 'approve') OutlinedButton(onPressed: _enabled ? () => _review(item.key, item.value) : null, child: Text(item.value)),
+          OutlinedButton(onPressed: _enabled ? () => _review(item.key,
+            data.isUpgrade && item.key == 'approve' ? 'Approve Driver Upgrade' : item.value) : null,
+            child: Text(data.isUpgrade && item.key == 'approve' ? 'Approve Driver Upgrade' : item.value)),
       ]),
-      if (widget.admin && data.isUpgrade && data.status == 'pending_review')
-        const Text('Upgrade approval and the trusted account-type transition are reserved for Stage 13C. You can request correction or reject with a reason.'),
       if (editable) Form(key: _form, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         if (data.status != 'draft') const Text(registrationResubmissionMessage),
         const Text('Basic information'),

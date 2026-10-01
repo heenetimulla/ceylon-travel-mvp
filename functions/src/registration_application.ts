@@ -1,4 +1,5 @@
-import {DocumentData, FieldValue, Firestore} from "firebase-admin/firestore";
+import {DocumentData, FieldValue, Firestore, Timestamp} from "firebase-admin/firestore";
+import {isDeepStrictEqual} from "node:util";
 import {DriverOperationError, normalizeIdentity, registryKey} from "./driver_administration";
 import {EvidenceMetadataReader, readDriverEvidence} from "./driver_evidence";
 
@@ -108,9 +109,10 @@ export async function processRegistrationOperation(db: Firestore, uid: string, o
         return;
       }
       const upgrade = previous?.purpose === "driver_upgrade";
+      requireValue(user.driverUpgradeStatus == null || upgrade, "invalid-purpose", "Refresh the current driver upgrade before continuing.");
       requireValue(!submitting || submittingUpgrade === upgrade, "invalid-purpose", "Use the current application workflow.");
       if (upgrade) {
-        requireValue(eligibleTourist(user), "invalid-account", "This account cannot submit or review a driver upgrade currently.");
+        requireValue(user.uid === uid && eligibleTourist(user), "invalid-account", "This account cannot submit or review a driver upgrade currently.");
         requireValue(previous && previous.uid === uid && previous.applicationRevision === revision &&
           previous.registrationStatus === user.driverUpgradeStatus, "stale-state", "Refresh the current driver upgrade before continuing.");
       }
@@ -199,9 +201,60 @@ export async function processRegistrationOperation(db: Firestore, uid: string, o
         keys(payload, []);
         requireValue(currentStatus === "pending_review" && previous?.registrationStatus === "pending_review" &&
           previous.applicationRevision === revision, "review-locked", "Only the current pending application can be reviewed.");
-        requireValue(!upgrade || op.action !== "approve", "upgrade-approval-unavailable",
-          "Driver upgrade approval and the trusted account transition will be available in Stage 13C. No account access has changed.");
         if (op.action === "approve") {
+          if (upgrade) {
+            const submitted = (await tx.get(appRef.collection("submissions").doc(String(revision)))).data();
+            requireValue(submitted && isDeepStrictEqual(previous, submitted) && submitted.uid === uid &&
+              submitted.accountType === "tourist" && submitted.targetAccountType === "driver" &&
+              submitted.purpose === "driver_upgrade" && submitted.registrationStatus === "pending_review" &&
+              Object.hasOwn(submitted, "identitySourceRevision") &&
+              submitted.applicationRevision === revision && submitted.agreementVersion === agreementVersion &&
+              submitted.agreementAcceptedAt instanceof Timestamp && submitted.submittedAt instanceof Timestamp &&
+              submitted.agreementAcceptedAt.isEqual(submitted.submittedAt),
+            "incomplete-application", "The current submitted upgrade is inconsistent. Request a correction.");
+            const fields = ["vehicleType", "vehicleNumber", "vehicleDetails", "operatingArea", "availableAreas"];
+            const driverProfile = upgradeDriverProfile(Object.fromEntries(fields.map(field => [field, submitted.profile?.[field]])));
+            requireValue(Array.isArray(submitted.evidence) && submitted.evidence.length === 3,
+              "incomplete-application", "All driver identity photos are required.");
+            const sourceRevision = submitted.identitySourceRevision;
+            if (sourceRevision != null) {
+              requireValue(Number.isSafeInteger(sourceRevision) && sourceRevision > 0 && sourceRevision < revision &&
+                user.identityVerificationStatus === "verified", "invalid-source", "The original verified identity requires review.");
+              const source = (await tx.get(appRef.collection("submissions").doc(String(sourceRevision)))).data();
+              const originalNic = source && Array.isArray(source.evidence)
+                ? source.evidence.find((e: DocumentData) => e?.evidenceType === "nic") : undefined;
+              requireValue(source?.uid === uid && source.applicationRevision === sourceRevision &&
+                source.accountType === "tourist" && source.purpose !== "driver_upgrade" &&
+                source.nicNumber === submitted.nicNumber && source.nicRegistryKey === submitted.nicRegistryKey && originalNic &&
+                isDeepStrictEqual(submitted.evidence.find((e: DocumentData) => e?.evidenceType === "nic"),
+                  {...originalNic, reusedFromApplicationRevision: sourceRevision}),
+              "invalid-source", "The original verified identity requires review.");
+            }
+            // Objects are append-only. Re-read authoritative Storage facts on review,
+            // including the explicitly referenced historical NIC, on each transaction attempt.
+            for (const kind of ["nic", "driving_licence", "selfie"]) {
+              const item = submitted.evidence.find((e: DocumentData) => e?.evidenceType === kind);
+              const evidenceRevision = kind === "nic" && sourceRevision != null ? sourceRevision : revision;
+              requireValue(item?.applicationRevision === evidenceRevision, "invalid-evidence", "Review the required identity photos.");
+              try {
+                const [actual] = await readDriverEvidence(uid, evidenceRevision, {[kind]: item.storagePath}, deps.evidenceMetadata, "registration_evidence");
+                const {reusedFromApplicationRevision: _source, ...stored} = item;
+                requireValue(isDeepStrictEqual(actual, stored), "invalid-evidence", "An identity photo changed. Request a correction.");
+              } catch (_) {
+                throw new DriverOperationError("invalid-evidence", "An identity photo is unavailable or changed. Request a correction.");
+              }
+            }
+            requireValue(!(await tx.get(db.doc(`driver_verifications/${uid}`))).exists &&
+              user.driverRegistrationNumber == null && user.membershipPlan == null && user.currentRegistrationPaymentId == null &&
+              (user.paymentStatus == null || user.paymentStatus === "pending") &&
+              (user.membershipStatus == null || user.membershipStatus === "pending") &&
+              Number.isSafeInteger(user.driverAdminRevision ?? 0) && (user.driverAdminRevision ?? 0) >= 0 &&
+              (user.driverAdminRevision ?? 0) < Number.MAX_SAFE_INTEGER,
+            "invalid-account", "Existing driver administration data requires operator review.");
+            Object.assign(patch, driverProfile, {accountType: "driver", registrationStatus: "approved",
+              identityVerificationStatus: "verified", accountStatus: "pending_approval", paymentStatus: "pending",
+              membershipStatus: "pending", driverAdminRevision: (user.driverAdminRevision ?? 0) + 1});
+          }
           // Confirm the submitted revision still holds its trusted identity claims.
           const config = (await tx.get(db.doc("system_config/driver_identity_registry"))).data();
           requireValue(config?.keyFingerprint === registryKey(deps.secret, "key-check", "stable-key-v1"),
@@ -214,9 +267,9 @@ export async function processRegistrationOperation(db: Firestore, uid: string, o
             requireValue(key === claim.key && (await tx.get(db.doc(`identity_registry/${key}`))).data()?.uid === uid,
               "identity-unavailable", "Identity claims require operator review. Contact support.");
           }
-          requireValue(reviewableAgreementVersions.includes(previous.agreementVersion) && previous.agreementAcceptedAt != null &&
+          requireValue(upgrade || (reviewableAgreementVersions.includes(previous.agreementVersion) && previous.agreementAcceptedAt != null &&
             Array.isArray(previous.evidence) && (driver ? ["nic", "driving_licence", "selfie"] : ["nic", "selfie"])
-              .every((type) => previous.evidence.some((e: DocumentData | null) => e != null && e.evidenceType === type && e.applicationRevision === revision)),
+              .every((type) => previous.evidence.some((e: DocumentData | null) => e != null && e.evidenceType === type && e.applicationRevision === revision))),
             "incomplete-application", "The submitted application is incomplete. Request a correction.");
         }
         reason = op.action === "approve" ? "" : text(op.reason, 500);
@@ -229,6 +282,16 @@ export async function processRegistrationOperation(db: Firestore, uid: string, o
           patch.membershipStatus = user.membershipStatus ?? "pending";
         }
         tx.update(appRef, {registrationStatus: next, reason: reason || null, reviewedBy: actor.uid, reviewedAt: stamp});
+        if (upgrade && next === "approved") {
+          const {registrationStatus: submittedRegistrationStatus, ...snapshot} = previous;
+          const verification = {...snapshot, submittedRegistrationStatus, identityVerificationStatus: "verified",
+            reviewedBy: actor.uid, reviewedAt: stamp, rejectionReason: null, updatedAt: stamp,
+            nicDocumentPath: previous.evidence.find((e: DocumentData) => e.evidenceType === "nic").storagePath,
+            drivingLicenceDocumentPath: previous.evidence.find((e: DocumentData) => e.evidenceType === "driving_licence").storagePath,
+            selfiePath: previous.evidence.find((e: DocumentData) => e.evidenceType === "selfie").storagePath};
+          tx.create(db.doc(`driver_verifications/${uid}`), verification);
+          tx.create(db.doc(`driver_verifications/${uid}/submissions/application_${revision}`), verification);
+        }
         if (driver && !upgrade) {
           tx.update(db.doc(`driver_verifications/${uid}`), {identityVerificationStatus: patch.identityVerificationStatus,
             rejectionReason: reason || null, reviewedBy: actor.uid, reviewedAt: stamp, updatedAt: stamp});
@@ -238,6 +301,8 @@ export async function processRegistrationOperation(db: Firestore, uid: string, o
       patch[upgrade ? "driverUpgradeStatus" : "registrationStatus"] = next;
       tx.update(userRef, patch);
       const audit = {actorUid: actor.uid,
+        ...(upgrade && next === "approved" ? {targetUid: uid, previousAccountType: "tourist", resultingAccountType: "driver",
+          resultingAccountStatus: "pending_approval"} : {}),
         action: upgrade ? (submitting ? "driver_upgrade_submitted" : `driver_upgrade_${next}`)
           : submitting ? "application_submitted" : `application_${next}`,
         purpose: upgrade ? "driver_upgrade" : "registration",

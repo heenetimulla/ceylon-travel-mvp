@@ -218,16 +218,43 @@ void main() {
       expect(find.byKey(const ValueKey('reviewApplication')), findsNothing);
     });
   }
-  testWidgets('Admin upgrade review exposes corrections but no premature approval/activation', (tester) async {
+  testWidgets('Admin upgrade approval requires confirmation and submits the current revision only', (tester) async {
     final service = _Service({..._profile(status: 'approved'), 'accountStatus': 'active',
       'driverUpgradeStatus': 'pending_review', 'applicationRevision': 2}, application: {
         'purpose': 'driver_upgrade', 'nicNumber': '901234567V', 'drivingLicenceNumber': 'B1234567', 'agreementVersion': '1.1'});
     await tester.pumpWidget(_panel(service, admin: true)); await tester.pumpAndSettle();
     expect(find.text('Approve application'), findsNothing);
+    expect(find.text('Approve Driver Upgrade'), findsOneWidget);
     expect(find.text('Request correction'), findsOneWidget);
     expect(find.text('Reject application'), findsOneWidget);
     expect(find.textContaining('drivingLicenceNumber: B1234567'), findsOneWidget);
     expect(find.text('Activate membership'), findsNothing);
+    await _tap(tester, find.text('Approve Driver Upgrade'));
+    expect(find.textContaining('payment verification and membership activation are still required'), findsOneWidget);
+    expect(service.calls, isEmpty);
+    await _tap(tester, find.text('Cancel'));
+    expect(service.calls, isEmpty);
+    await _tap(tester, find.text('Approve Driver Upgrade'));
+    await _tap(tester, find.text('Confirm'));
+    expect(service.calls.single['uid'], 'owner');
+    expect(service.calls.single['action'], 'approve');
+    expect(service.calls.single['revision'], 2);
+    expect(service.calls.single['payload'], isEmpty);
+    expect(find.text('Approve Driver Upgrade'), findsNothing);
+  });
+  test('Approved upgrade remains non-operational until existing driver requirements pass', () {
+    final profile = {..._profile(driver: true, status: 'approved'), 'driverUpgradeStatus': 'approved',
+      'identityVerificationStatus': 'verified', 'accountStatus': 'pending_approval',
+      'paymentStatus': 'pending', 'membershipStatus': 'pending'};
+    expect(applicationOperational(profile), isFalse);
+    expect(driverCanBid(profile), isFalse);
+    profile['accountStatus'] = 'active';
+    expect(driverCanBid(profile), isFalse);
+    profile['paymentStatus'] = 'verified';
+    expect(driverCanBid(profile), isFalse);
+    profile['membershipStatus'] = 'active';
+    profile['membershipPlan'] = 'founding_lifetime';
+    expect(applicationOperational(profile), isTrue);
   });
   testWidgets('Approved upgrade still cannot activate a Tourist from the client', (tester) async {
     final service = _Service({..._profile(status: 'approved'), 'accountStatus': 'active',
@@ -262,6 +289,13 @@ class _Service extends RegistrationApplicationService {
   Future<void> perform(String uid, String action, Map<String, dynamic> payload,
     {required int revision, required String operationId, bool admin = false, String reason = ''}) async {
     calls.add({'uid': uid, 'action': action, 'payload': payload, 'revision': revision, 'reason': reason});
+    if (action == 'approve' && application?['purpose'] == 'driver_upgrade') {
+      profile = {...profile, 'driverUpgradeStatus': 'approved', 'accountType': 'driver',
+        'identityVerificationStatus': 'verified', 'accountStatus': 'pending_approval',
+        'paymentStatus': 'pending', 'membershipStatus': 'pending'};
+      application = {...?application, 'registrationStatus': 'approved'};
+      return;
+    }
     if (action == 'start_driver_upgrade') {
       profile = {...profile, 'driverUpgradeStatus': 'draft'};
       application = {'purpose': 'driver_upgrade', 'identitySourceRevision': 1};

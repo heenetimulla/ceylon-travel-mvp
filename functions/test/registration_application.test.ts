@@ -346,18 +346,122 @@ test('Correction/rejection resubmits a new immutable upgrade revision without al
   }
 });
 
-test('Upgrade approval/transition is reserved for Stage 13C; applicant and support cannot decide', async () => {
+test('Primary admin approves upgrade on the same UID; applicant and support cannot decide', async () => {
   const store = new Store(); await approvedTourist(store); await beginUpgrade(store);
   enqueue(store, 'owner', 'upgrade-submit', 'submit_driver_upgrade', upgradePayload()); await run(store, 'owner', 'upgrade-submit');
-  for (const actor of ['owner', 'stranger', 'support-only', 'admin']) {
+  const original = store.docs.get('users/owner')!;
+  const submission = store.docs.get('registration_applications/owner/submissions/2');
+  const touristSubmission = store.docs.get('registration_applications/owner/submissions/1');
+  store.docs.set('users/owner/support_history/retained', {example: 'unchanged'});
+  for (const actor of ['owner', 'stranger', 'support-only']) {
     enqueue(store, 'owner', `approval-${actor}`, 'approve', {}, actor);
-    assert.equal((await run(store, 'owner', `approval-${actor}`)).errorCode,
-      actor === 'admin' ? 'upgrade-approval-unavailable' : 'permission-denied');
+    assert.equal((await run(store, 'owner', `approval-${actor}`)).errorCode, 'permission-denied');
   }
-  assert.equal(store.docs.get('users/owner')!.accountType, 'tourist');
-  assert.equal(store.docs.get('users/owner')!.membershipStatus, undefined);
+  enqueue(store, 'owner', 'approval-admin', 'approve', {}, 'admin');
+  assert.equal((await run(store, 'owner', 'approval-admin')).status, 'succeeded');
+  const user = store.docs.get('users/owner')!;
+  assert.equal(user.uid, 'owner'); assert.equal(user.accountType, 'driver');
+  assert.equal(user.registrationStatus, 'approved'); assert.equal(user.driverUpgradeStatus, 'approved');
+  assert.equal(user.identityVerificationStatus, 'verified'); assert.equal(user.accountStatus, 'pending_approval');
+  assert.equal(user.paymentStatus, 'pending'); assert.equal(user.membershipStatus, 'pending');
+  assert.equal(user.vehicleType, 'Any'); assert.equal(user.driverAdminRevision, 1);
+  for (const field of ['membershipPlan', 'driverRegistrationNumber', 'registrationFeePaidLkr', 'currentRegistrationPaymentId']) {
+    assert.equal(user[field], undefined);
+  }
+  for (const field of ['fullName', 'phoneNumber', 'email', 'city', 'averageRating', 'completedTripsCount']) {
+    assert.deepEqual(user[field], original[field]);
+  }
+  assert.deepEqual(store.docs.get('registration_applications/owner/submissions/2'), submission);
+  assert.deepEqual(store.docs.get('registration_applications/owner/submissions/1'), touristSubmission);
+  assert.deepEqual(store.docs.get('users/owner/support_history/retained'), {example: 'unchanged'});
+  assert.equal([...store.docs.keys()].filter(p => /^users\/[^/]+$/.test(p)).length, 1);
+  assert.equal(store.docs.get('driver_verifications/owner')!.identityVerificationStatus, 'verified');
+  const audit = store.docs.get('users/owner/admin_history/application_approval-admin')!;
+  assert.equal(audit.targetUid, 'owner'); assert.equal(audit.actorUid, 'admin');
+  assert.equal(audit.previousAccountType, 'tourist'); assert.equal(audit.resultingAccountType, 'driver');
+  assert.equal(audit.applicationRevision, 2); assert.equal(audit.purpose, 'driver_upgrade');
+  const size = store.docs.size;
+  await run(store, 'owner', 'approval-admin'); assert.equal(store.docs.size, size);
+  enqueue(store, 'owner', 'replay-new-id', 'approve', {}, 'admin');
+  assert.equal((await run(store, 'owner', 'replay-new-id')).status, 'failed');
+  store.docs.set('users/owner/driver_operations/activate', {actorUid: 'admin', status: 'pending', action: 'activate_membership', payload: {}, expectedRevision: 1});
+  await processDriverOperation(store.db, 'owner', 'activate', deps);
+  assert.equal(store.docs.get('users/owner/driver_operations/activate')!.errorCode, 'payment-required');
   enqueue(store, 'owner', 'forged-owner', 'submit_driver_upgrade', upgradePayload(), 'stranger');
   assert.equal((await run(store, 'owner', 'forged-owner')).errorCode, 'permission-denied');
+});
+
+test('Upgrade approval fails closed for stale, malformed, ineligible and conflicting identity records', async () => {
+  const changes: Array<(s: Store) => void> = [
+    s => { s.docs.delete('users/owner'); },
+    s => { s.docs.get('users/owner')!.accountStatus = 'suspended'; },
+    s => { s.docs.get('users/owner')!.accountType = 'driver'; },
+    s => { s.docs.get('registration_applications/owner')!.purpose = 'registration'; },
+    s => { s.docs.get('registration_applications/owner')!.applicationRevision = 1; },
+    s => { s.docs.get('users/owner')!.driverUpgradeStatus = 'rejected'; },
+    s => { s.docs.get('registration_applications/owner')!.profile = {}; },
+    ...['drivingLicenceNumber', 'agreementAcceptedAt', 'identitySourceRevision'].map(field => (s: Store) => {
+      for (const path of ['registration_applications/owner', 'registration_applications/owner/submissions/2']) delete s.docs.get(path)![field];
+    }),
+    s => { for (const path of ['registration_applications/owner', 'registration_applications/owner/submissions/2']) s.docs.get(path)!.agreementVersion = '1.0'; },
+    s => { for (const path of ['registration_applications/owner', 'registration_applications/owner/submissions/2']) s.docs.get(path)!.agreementAcceptedAt = 'not-a-timestamp'; },
+    ...['vehicleType', 'vehicleNumber', 'vehicleDetails', 'operatingArea', 'availableAreas'].map(field => (s: Store) => {
+      for (const path of ['registration_applications/owner', 'registration_applications/owner/submissions/2']) delete s.docs.get(path)!.profile[field];
+    }),
+    ...['driving_licence', 'selfie'].map(kind => (s: Store) => {
+      for (const path of ['registration_applications/owner', 'registration_applications/owner/submissions/2']) {
+        s.docs.get(path)!.evidence = s.docs.get(path)!.evidence.filter((e: DocumentData) => e.evidenceType !== kind);
+      }
+    }),
+    ...['nicRegistryKey', 'licenceRegistryKey'].map(field => (s: Store) => {
+      s.docs.get(`identity_registry/${s.docs.get('registration_applications/owner')![field]}`)!.uid = 'private-other-owner';
+    }),
+  ];
+  for (const change of changes) {
+    const store = new Store(); await approvedTourist(store); await beginUpgrade(store);
+    enqueue(store, 'owner', 'upgrade-submit', 'submit_driver_upgrade', upgradePayload()); await run(store, 'owner', 'upgrade-submit');
+    enqueue(store, 'owner', 'approve', 'approve', {}, 'admin'); change(store);
+    const result = await run(store, 'owner', 'approve');
+    assert.equal(result.status, 'failed'); assert.ok(!result.errorMessage.includes('private-other-owner'));
+    assert.equal(store.docs.has('driver_verifications/owner'), false);
+    assert.equal(store.docs.has('registration_applications/owner/history/approve'), false);
+  }
+});
+
+test('Upgrade approval revalidates Storage metadata and concurrent approvals commit only once', async () => {
+  const store = new Store(); await approvedTourist(store); await beginUpgrade(store);
+  enqueue(store, 'owner', 'upgrade-submit', 'submit_driver_upgrade', upgradePayload()); await run(store, 'owner', 'upgrade-submit');
+  enqueue(store, 'owner', 'bad-storage', 'approve', {}, 'admin');
+  await processRegistrationOperation(store.db, 'owner', 'bad-storage', {...deps,
+    evidenceMetadata: async path => ({...await deps.evidenceMetadata(path), generation: 'changed'})});
+  assert.equal(store.docs.get('users/owner/application_operations/bad-storage')!.errorCode, 'invalid-evidence');
+  enqueue(store, 'owner', 'stale', 'approve', {}, 'admin', '', 1);
+  assert.equal((await run(store, 'owner', 'stale')).errorCode, 'stale-state');
+  enqueue(store, 'owner', 'one', 'approve', {}, 'admin'); enqueue(store, 'owner', 'two', 'approve', {}, 'admin');
+  const results = await Promise.all([run(store, 'owner', 'one'), run(store, 'owner', 'two')]);
+  assert.equal(results.filter(r => r.status === 'succeeded').length, 1);
+  assert.equal([...store.docs.entries()].filter(([path, value]) => path.startsWith('users/owner/admin_history/') && value.action === 'driver_upgrade_approved').length, 1);
+});
+
+test('Disabled primary admin cannot approve and legacy Tourist upgrade establishes current driver gates', async () => {
+  const store = new Store(); applicant(store, 'owner');
+  const user = store.docs.get('users/owner')!;
+  delete user.registrationStatus; delete user.accountStatus; delete user.applicationRevision;
+  assert.equal((await beginUpgrade(store)).status, 'succeeded');
+  const data = upgradePayload('owner', 1); data.nicNumber = '901234567V';
+  data.evidence.nic = `registration_evidence/owner/1/nic/${'a'.repeat(32)}.jpg`;
+  enqueue(store, 'owner', 'submit-upgrade', 'submit_driver_upgrade', data);
+  assert.equal((await run(store, 'owner', 'submit-upgrade')).status, 'succeeded');
+  enqueue(store, 'owner', 'disabled', 'approve', {}, 'admin');
+  await processRegistrationOperation(store.db, 'owner', 'disabled', {...deps,
+    principal: async uid => ({uid, admin: true, disabled: true})});
+  assert.equal(store.docs.get('users/owner/application_operations/disabled')!.errorCode, 'permission-denied');
+  enqueue(store, 'owner', 'approve-upgrade', 'approve', {}, 'admin');
+  assert.equal((await run(store, 'owner', 'approve-upgrade')).status, 'succeeded');
+  assert.equal(store.docs.get('users/owner')!.registrationStatus, 'approved');
+  assert.equal(store.docs.get('users/owner')!.accountStatus, 'pending_approval');
+  assert.equal(store.docs.get('users/owner')!.identityVerificationStatus, 'verified');
+  assert.equal(store.docs.get('users/owner')!.paymentStatus, 'pending');
 });
 
 test('Upgrade DL claims are globally unique under concurrent submissions and do not leak the conflicting UID', async () => {
