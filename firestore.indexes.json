@@ -1,6 +1,15 @@
 {
   "indexes": [
     {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "driverUpgradeStatus", "order": "ASCENDING"},
+        {"fieldPath": "accountType", "order": "ASCENDING"},
+        {"fieldPath": "__name__", "order": "ASCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "support_requests",
       "queryScope": "COLLECTION",
       "fields": [

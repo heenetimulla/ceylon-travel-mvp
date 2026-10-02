@@ -221,10 +221,15 @@ void main() {
   testWidgets('Admin upgrade approval requires confirmation and submits the current revision only', (tester) async {
     final service = _Service({..._profile(status: 'approved'), 'accountStatus': 'active',
       'driverUpgradeStatus': 'pending_review', 'applicationRevision': 2}, application: {
-        'purpose': 'driver_upgrade', 'nicNumber': '901234567V', 'drivingLicenceNumber': 'B1234567', 'agreementVersion': '1.1'});
+        'purpose': 'driver_upgrade', 'nicNumber': '901234567V', 'drivingLicenceNumber': 'B1234567', 'agreementVersion': '1.1',
+        'nicRegistryKey': 'PRIVATE-HMAC-KEY'});
     await tester.pumpWidget(_panel(service, admin: true)); await tester.pumpAndSettle();
     expect(find.text('Approve application'), findsNothing);
     expect(find.text('Approve Driver Upgrade'), findsOneWidget);
+    expect(find.text('Application purpose: Driver Upgrade'), findsOneWidget);
+    expect(find.text('Existing account at submission: Tourist'), findsOneWidget);
+    expect(find.text('Requested role: Driver / Partner'), findsOneWidget);
+    expect(find.textContaining('PRIVATE-HMAC-KEY'), findsNothing);
     expect(find.text('Request correction'), findsOneWidget);
     expect(find.text('Reject application'), findsOneWidget);
     expect(find.textContaining('drivingLicenceNumber: B1234567'), findsOneWidget);

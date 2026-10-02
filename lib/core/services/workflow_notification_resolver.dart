@@ -77,7 +77,7 @@ class WorkflowNotificationResolver {
       }
       return WorkflowDestination.adminOverview;
     }
-    final admin = ['registration_submitted', 'payment_submitted'].contains(intent.type);
+    final admin = ['registration_submitted', 'driver_upgrade_submitted', 'payment_submitted'].contains(intent.type);
     if (admin ? claims['admin'] != true : intent.uid != intent.resourceId) {
       throw StateError('Account access required');
     }
@@ -86,9 +86,29 @@ class WorkflowNotificationResolver {
       throw StateError('Account unavailable');
     }
     final application = await _read(intent, 'registration_applications/${intent.resourceId}');
+    final upgrade = application?['purpose'] == 'driver_upgrade';
+    if (intent.isDriverUpgrade) {
+      if (!upgrade || application?['uid'] != intent.resourceId || application?['accountType'] != 'tourist' ||
+          application?['targetAccountType'] != 'driver' || application?['applicationRevision'] != profile['applicationRevision'] ||
+          profile['applicationRevision'] is! int || (profile['applicationRevision'] as int) < 1 ||
+          application?['registrationStatus'] != profile['driverUpgradeStatus'] ||
+          !['pending_review', 'correction_required', 'rejected', 'approved'].contains(profile['driverUpgradeStatus']) ||
+          (profile['driverUpgradeStatus'] == 'approved' && profile['registrationStatus'] != 'approved') ||
+          profile['accountType'] != (profile['driverUpgradeStatus'] == 'approved' ? 'driver' : 'tourist')) {
+        throw StateError('Upgrade unavailable');
+      }
+      if (admin) {
+        if (profile['driverUpgradeStatus'] != 'pending_review') {
+          throw StateError('Upgrade already reviewed');
+        }
+        return WorkflowDestination.adminApplication;
+      }
+      // Owner sees the current correction/status workflow, not their still-active Tourist home.
+      if (profile['accountType'] == 'tourist') { return WorkflowDestination.application; }
+    }
     if (profile.containsKey('registrationStatus') && (application == null ||
         application['uid'] != intent.resourceId || application['applicationRevision'] != profile['applicationRevision'] ||
-        application['registrationStatus'] != profile['registrationStatus'])) {
+        application['registrationStatus'] != profile[upgrade ? 'driverUpgradeStatus' : 'registrationStatus'])) {
       throw StateError('Refresh application state');
     }
     if (intent.type == 'registration_submitted') {

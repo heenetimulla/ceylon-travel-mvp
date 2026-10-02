@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {before, after, beforeEach, test} from 'node:test';
 import {initializeTestEnvironment, assertSucceeds, assertFails} from '@firebase/rules-unit-testing';
-import {doc, getDoc, setDoc, updateDoc, serverTimestamp} from 'firebase/firestore';
+import {and, collection, doc, documentId, getDoc, getDocs, limit, or, orderBy, query, setDoc, startAfter, updateDoc, where, serverTimestamp} from 'firebase/firestore';
 
 let env;
 const user = {uid: 'owner', accountType: 'tourist', status: 'active', registrationStatus: 'approved',
@@ -30,6 +30,48 @@ const payload = () => ({profile: {vehicleType: 'Any', vehicleNumber: 'ABC-1234',
 async function state(status) {
   await env.withSecurityRulesDisabled(ctx => updateDoc(doc(ctx.firestore(), 'users/owner'), {driverUpgradeStatus: status}));
 }
+
+test('indexed attention query shapes include upgrades, preserve pagination and require primary admin', async () => {
+  const rows = {
+    'new-tourist': {accountType: 'tourist', registrationStatus: 'pending_review'},
+    'new-driver': {accountType: 'driver', registrationStatus: 'pending_review'},
+    'upgrade': {accountType: 'tourist', registrationStatus: 'approved', driverUpgradeStatus: 'pending_review'},
+    'correction': {accountType: 'tourist', registrationStatus: 'approved', driverUpgradeStatus: 'correction_required'},
+    'approved-upgrade': {accountType: 'driver', registrationStatus: 'approved', driverUpgradeStatus: 'approved',
+      paymentStatus: 'pending', membershipStatus: 'pending', accountStatus: 'pending_approval'},
+  };
+  await env.withSecurityRulesDisabled(async ctx => {
+    for (const [id, data] of Object.entries(rows)) await setDoc(doc(ctx.firestore(), `users/${id}`), {...user, ...data, uid: id});
+    await setDoc(doc(ctx.firestore(), 'registration_applications/upgrade'), {uid: 'upgrade', purpose: 'driver_upgrade'});
+  });
+  const admin = db('admin', {admin: true}), users = collection(admin, 'users');
+  const states = ['pending_review', 'correction_required', 'rejected'];
+  const attention = or(where('registrationStatus', 'in', states), where('driverUpgradeStatus', 'in', states));
+  const first = await assertSucceeds(getDocs(query(users, attention, orderBy(documentId()), limit(2))));
+  const second = await assertSucceeds(getDocs(query(users, attention, orderBy(documentId()), startAfter(first.docs.at(-1).id), limit(2))));
+  assert.deepEqual([...first.docs, ...second.docs].map(d => d.id).sort(), ['correction', 'new-driver', 'new-tourist', 'upgrade']);
+  const upgrades = await assertSucceeds(getDocs(query(users, where('driverUpgradeStatus', 'in', [...states, 'approved']), orderBy(documentId()), limit(30))));
+  assert.deepEqual(upgrades.docs.map(d => d.id), ['approved-upgrade', 'correction', 'upgrade']);
+  const corrections = await assertSucceeds(getDocs(query(users, or(where('registrationStatus', '==', 'correction_required'),
+    where('driverUpgradeStatus', '==', 'correction_required')), orderBy(documentId()), limit(30))));
+  assert.deepEqual(corrections.docs.map(d => d.id), ['correction']);
+  for (const role of ['tourist', 'driver']) {
+    const page = await assertSucceeds(getDocs(query(users, and(attention, where('accountType', '==', role)), orderBy(documentId()), limit(30))));
+    assert.ok(page.docs.length > 0); assert.ok(page.docs.every(d => d.data().accountType === role));
+  }
+  const payments = await assertSucceeds(getDocs(query(users, and(where('registrationStatus', '==', 'approved'), where('accountType', '==', 'driver'),
+    or(where('paymentStatus', '==', 'pending'), where('paymentStatus', '==', 'rejected'),
+      where('accountStatus', '==', 'pending_approval'), where('membershipStatus', '==', 'pending'))), orderBy(documentId()), limit(30))));
+  assert.deepEqual(payments.docs.map(d => d.id), ['approved-upgrade']);
+  // Notification/admin readers must use bounded profile queries; private application heads use gets.
+  await assertFails(getDoc(doc(admin, 'users/upgrade')));
+  await assertSucceeds(getDocs(query(users, where(documentId(), '==', 'upgrade'), limit(1))));
+  await assertSucceeds(getDoc(doc(admin, 'registration_applications/upgrade')));
+  await assertFails(getDocs(collection(admin, 'registration_applications')));
+  for (const client of [db(), db('support', {supportAdmin: true})]) {
+    await assertFails(getDocs(query(collection(client, 'users'), attention, orderBy(documentId()), limit(30))));
+  }
+});
 
 test('eligible owner requests draft through immutable operation only', async () => {
   const ref = doc(db(), 'users/owner/application_operations/start');

@@ -280,7 +280,17 @@ class _FirebaseWorkflowReader implements WorkflowNotificationReader {
     return token.claims ?? <String, dynamic>{};
   }
   @override
-  Future<Map<String, dynamic>?> read(String path) async =>
-      (await FirebaseFirestore.instance.doc(path).get(const GetOptions(source: Source.server))
-          .timeout(const Duration(seconds: 15))).data();
+  Future<Map<String, dynamic>?> read(String path) async {
+    final parts = path.split('/');
+    if (parts.length == 2 && parts.first == 'users' && parts.last != FirebaseAuth.instance.currentUser?.uid) {
+      // Profile get is owner-only; primary admins have narrow list/query access.
+      // Resolver checks live claims and session before and after this server read.
+      final result = await FirebaseFirestore.instance.collection('users')
+        .where(FieldPath.documentId, isEqualTo: parts.last).limit(1)
+        .get(const GetOptions(source: Source.server)).timeout(const Duration(seconds: 15));
+      return result.docs.isEmpty ? null : result.docs.single.data();
+    }
+    return (await FirebaseFirestore.instance.doc(path).get(const GetOptions(source: Source.server))
+      .timeout(const Duration(seconds: 15))).data();
+  }
 }

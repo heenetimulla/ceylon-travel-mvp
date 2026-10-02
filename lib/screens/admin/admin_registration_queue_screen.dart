@@ -45,11 +45,11 @@ class _QueueState extends State<_Queue> {
   Widget build(BuildContext context) => ListView(padding: appPagePadding(context), children: [
     Wrap(spacing: 8, children: [for (final filter in RegistrationQueueFilter.values) ChoiceChip(label: Text(filter.label),
       selected: _filter == filter, onSelected: (_) { _filter = filter; _load(); })]),
-    const Text('Identity queues include rejected applications eligible for follow-up. Payment & Activation includes pending or rejected payments and membership activation waiting for review.'),
+    const Text('Review queues include registrations, driver upgrades and rejected applications eligible for follow-up. Driver Upgrades also retains approved upgrades. Tourists and Drivers filter current account type. Payment & Activation includes pending or rejected payments and membership activation waiting for review.'),
     TextButton(onPressed: _busy ? null : () => _load(), child: const Text('Refresh registrations')),
     for (final row in _rows) Card(child: ListTile(title: Text(row.user.displayName),
       subtitle: Text('${row.user.accountTypeLabel} · ${row.user.statusLabel}\n'
-        'Registration: ${row.user.registrationStatus}\nRevision: ${row.revision ?? 'Not available'}\n'
+        '${row.purposeLabel}\nApplication: ${(row.applicationState ?? row.user.registrationStatus ?? 'Not available').replaceAll('_', ' ')}\nRevision: ${row.revision ?? 'Not available'}\n'
         'Submitted: ${row.submittedAt?.toLocal() ?? 'Not available'}\nPhone: ${row.user.phoneNumber ?? 'Not available'}'),
       trailing: const Icon(Icons.chevron_right), onTap: () async {
         await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => AdminUserDetailScreen(uid: row.user.uid, service: widget.service.admin,

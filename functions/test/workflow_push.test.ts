@@ -226,3 +226,106 @@ test("staff candidate registry comes only from Auth claims, not profile fields",
   await syncNotificationStaff(db, auth, "owner");
   assert.deepEqual(writes, ["set:notification_staff/admin", "delete:notification_staff/owner"]);
 });
+
+function upgrade(state: string, revision = 2) {
+  const f = application(state);
+  f.event.data = {...f.event.data, purpose: "driver_upgrade", applicationRevision: revision,
+    action: state === "pending_review" ? "driver_upgrade_submitted" : `driver_upgrade_${state}`};
+  f.docs[f.event.path] = {...f.event.data};
+  Object.assign(f.docs["users/owner"], {uid: "owner", registrationStatus: "approved", driverUpgradeStatus: state,
+    applicationRevision: revision, accountType: state === "approved" ? "driver" : "tourist",
+    paymentStatus: "pending", membershipStatus: "pending"});
+  Object.assign(f.docs["registration_applications/owner"], {purpose: "driver_upgrade", targetAccountType: "driver",
+    accountType: "tourist", applicationRevision: revision, operationId: "op", reviewedBy: "admin"});
+  return f;
+}
+
+for (const [state, type] of [["pending_review", "driver_upgrade_submitted"],
+  ["correction_required", "driver_upgrade_correction_required"], ["rejected", "driver_upgrade_rejected"],
+  ["approved", "driver_upgrade_approved"]]) {
+  test(`upgrade ${state} uses existing delivery with correct audience and private payload`, async () => {
+    const f = upgrade(state);
+    await Promise.all([deliverWorkflowPush(f.port, f.event), deliverWorkflowPush(f.port, f.event)]);
+    assert.deepEqual(f.recipients, state === "pending_review" ? ["admin", "primary"] : ["owner"]);
+    for (const payload of f.sent) {
+      assert.deepEqual(payload.data, {type, accountUid: "owner"});
+      assert.equal(payload.tokens.length, 2);
+      assert.doesNotMatch(JSON.stringify(payload), /SECRET|nicNumber|evidence|reason|bank|3500/);
+    }
+    if (state === "approved") {
+      assert.match(f.sent[0].notification!.body!, /remaining payment and membership steps/);
+      assert.doesNotMatch(f.sent[0].notification!.body!, /now active|fully active/);
+    }
+    assert.equal(await deliverWorkflowPush(f.port, f.event), "ignored");
+  });
+}
+
+test("corrected upgrade revision notifies reviewers, obsolete submitted revision does not", async () => {
+  const f = upgrade("pending_review", 3);
+  f.event.data.previousValue = "correction_required";
+  f.docs[f.event.path].previousValue = "correction_required";
+  assert.equal(await deliverWorkflowPush(f.port, f.event), "attempted");
+  assert.deepEqual(f.recipients, ["admin", "primary"]);
+  const stale = upgrade("pending_review"); stale.docs["users/owner"].applicationRevision = 3;
+  assert.equal(await deliverWorkflowPush(stale.port, stale.event), "ignored");
+});
+
+test("upgrade malformed purpose, ownership, state and forged reviewer fail closed", async () => {
+  for (const change of [
+    (f: ReturnType<typeof upgrade>) => { delete f.docs["users/owner"]; },
+    (f: ReturnType<typeof upgrade>) => { f.docs["users/owner"].uid = "other"; },
+    (f: ReturnType<typeof upgrade>) => { f.docs["users/owner"].driverUpgradeStatus = "pending_review"; },
+    (f: ReturnType<typeof upgrade>) => { f.docs["registration_applications/owner"].uid = "other"; },
+    (f: ReturnType<typeof upgrade>) => { f.docs["registration_applications/owner"].purpose = "registration"; },
+    (f: ReturnType<typeof upgrade>) => { f.docs["registration_applications/owner"].registrationStatus = "toString"; },
+    (f: ReturnType<typeof upgrade>) => { f.docs["registration_applications/owner"].applicationRevision = 3; },
+    (f: ReturnType<typeof upgrade>) => { f.docs["registration_applications/owner"].targetAccountType = "tourist"; },
+    (f: ReturnType<typeof upgrade>) => { f.principals.admin = {...people.admin, admin: false}; },
+    (f: ReturnType<typeof upgrade>) => { f.docs[f.event.path].purpose = "registration"; },
+  ]) {
+    const f = upgrade("approved"); change(f);
+    assert.equal(await deliverWorkflowPush(f.port, f.event), "ignored"); assert.deepEqual(f.sent, []);
+  }
+});
+
+test("upgrade delivery rechecks staff claims and owner revision immediately before sending", async () => {
+  const f = upgrade("pending_review");
+  f.port.tokens = async function* (uid) {
+    f.principals[uid] = {...people[uid], admin: false};
+    yield [{id: "one", token: "revoked-token"}];
+  };
+  await deliverWorkflowPush(f.port, f.event); assert.deepEqual(f.sent, []);
+  const changed = upgrade("approved");
+  changed.port.tokens = async function* () {
+    changed.docs["users/owner"].applicationRevision = 3;
+    yield [{id: "one", token: "stale"}];
+  };
+  await deliverWorkflowPush(changed.port, changed.event); assert.deepEqual(changed.sent, []);
+});
+
+test("upgrade notifications suppress actor, preserve source on FCM failure and clean only invalid tokens", async () => {
+  const own = upgrade("approved");
+  own.event.data.actorUid = "owner"; own.docs[own.event.path].actorUid = "owner";
+  own.docs["registration_applications/owner"].reviewedBy = "owner";
+  own.principals.owner = {...people.owner, admin: true};
+  await deliverWorkflowPush(own.port, own.event); assert.deepEqual(own.sent, []);
+  const f = upgrade("approved"), before = JSON.stringify(f.docs);
+  f.port.send = async () => ({responses: [
+    {success: false, error: {code: "messaging/registration-token-not-registered"}},
+    {success: false, error: {code: "messaging/server-unavailable"}},
+  ]});
+  assert.equal(await deliverWorkflowPush(f.port, f.event), "failed");
+  assert.deepEqual(f.removed, ["owner/one"]); assert.equal(JSON.stringify(f.docs), before);
+  const network = upgrade("approved"), original = JSON.stringify(network.docs);
+  network.port.send = async () => { throw new Error("network"); };
+  assert.equal(await deliverWorkflowPush(network.port, network.event), "failed");
+  assert.deepEqual(network.removed, []); assert.equal(JSON.stringify(network.docs), original);
+});
+
+test("approved upgrades retain existing payment and membership notification types", async () => {
+  for (const [action, type] of [["submit_payment", "payment_submitted"], ["verify_payment", "payment_verified"],
+    ["reject_payment", "payment_rejected"], ["activate_membership", "membership_activated"]]) {
+    const f = operation(action); f.docs["users/owner"].driverUpgradeStatus = "approved";
+    assert.equal((await workflowNotice(f.port, f.event))?.type, type);
+  }
+});

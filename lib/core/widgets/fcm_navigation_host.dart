@@ -34,7 +34,7 @@ Widget workflowNotificationDestination(TripChatPushIntent intent, WorkflowDestin
   WorkflowDestination.supportAdmin => AdminSupportDetailScreen(requestId: intent.resourceId),
   WorkflowDestination.adminApplication => AdminUserDetailScreen(uid: intent.resourceId),
   WorkflowDestination.adminPayment => AdminUserDetailScreen(uid: intent.resourceId, paymentFocus: true),
-  WorkflowDestination.application => RegistrationApplicationScreen(uid: intent.resourceId),
+  WorkflowDestination.application => RegistrationApplicationScreen(uid: intent.resourceId, upgradeRequest: intent.isDriverUpgrade),
   WorkflowDestination.driverStatus => DriverRegistrationStatusScreen(uid: intent.resourceId),
   WorkflowDestination.touristHome => const TouristHomeScreen(),
   WorkflowDestination.driverHome => const DriverHomeScreen(),

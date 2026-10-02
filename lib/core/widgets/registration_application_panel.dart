@@ -194,7 +194,9 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
       Text('Status: ${data.status.replaceAll('_', ' ')}'), Text('Application revision: ${data.revision}'),
       Text('Account status: ${data.profile['accountStatus'] ?? 'Not available'}'),
       if (data.isUpgrade) Text(data.status == 'approved'
-        ? 'Driver upgrade approved. Complete payment verification and membership activation before operational driver access.'
+        ? applicationOperational(data.profile) && driverCanBid(data.profile)
+          ? 'Driver upgrade approved. Driver membership active.'
+          : 'Driver upgrade approved. Complete payment verification and membership activation before operational driver access.'
         : 'Purpose: Tourist → Driver upgrade. Your existing account and its access remain unchanged until a trusted transition.'),
       if (_saving) const LinearProgressIndicator(),
       if (_message != null) Text(_message!),
@@ -204,6 +206,12 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
       if (data.pendingOperation || _uncertain) const Text('An application action may still be queued. Refresh before another submission.'),
       if (data.status == 'pending_review') const Text('Application submitted for manual review. Submission does not mean approval.'),
       if (widget.admin) ...[
+        if (data.isUpgrade) ...[
+          const Text('Application purpose: Driver Upgrade'),
+          const Text('Existing account at submission: Tourist'),
+          const Text('Requested role: Driver / Partner'),
+          Text('Current account type: ${data.profile['accountType'] ?? 'Not available'}'),
+        ],
         for (final key in ['nicNumber', if (driver) 'drivingLicenceNumber', 'agreementVersion', 'agreementAcceptedAt', 'submittedAt', 'reviewedBy', 'reviewedAt'])
           SelectableText('$key: ${DriverAdministration.display(app[key])}'),
         if (app['profile'] is Map) for (final entry in (app['profile'] as Map).entries) SelectableText('${entry.key}: ${entry.value}'),

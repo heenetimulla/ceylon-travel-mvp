@@ -62,6 +62,7 @@ class TripChatPushIntent {
   bool get isWorkflow => workflowBodies.containsKey(type);
   bool get isSupport => type.startsWith('support_');
   bool get isPayment => type.startsWith('payment_');
+  bool get isDriverUpgrade => type.startsWith('driver_upgrade_');
   final int sessionEpoch;
   bool belongsTo(String? currentUid, int currentEpoch) => uid == currentUid && sessionEpoch == currentEpoch;
   static const bodies = <String, String>{
@@ -84,6 +85,10 @@ class TripChatPushIntent {
     'registration_rejected': 'Your registration application has been reviewed.',
     'registration_approved': 'Your Ceylon Travel account has been approved.',
     'registration_driver_approved': 'Your driver application has been approved. Complete the remaining account steps.',
+    'driver_upgrade_submitted': 'A driver upgrade application is ready for review.',
+    'driver_upgrade_correction_required': 'Your driver upgrade application needs an update.',
+    'driver_upgrade_rejected': 'Your driver upgrade application has been reviewed.',
+    'driver_upgrade_approved': 'Your Driver/Partner upgrade was approved. Complete the remaining payment and membership steps to activate driver access.',
     'identity_verified': 'Your identity verification has been completed.',
     'identity_action_required': 'Your identity verification needs attention.',
     'payment_submitted': 'A driver payment is ready for review.',

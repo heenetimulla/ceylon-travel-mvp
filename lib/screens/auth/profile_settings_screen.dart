@@ -119,7 +119,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           if (profile.canRequestDriverUpgrade || profile.driverUpgradeStatus != null) AppInfoCard(children: [
             const AppSectionHeader('Driver / Partner upgrade'),
             if (profile.driverUpgradeStatus case final status?)
-              Text(status == 'approved' ? 'Approved — payment/membership activation required'
+              Text(status == 'approved' ? profile.isOperationalDriver
+                ? 'Driver upgrade approved — driver membership active'
+                : 'Approved — payment/membership activation required'
                 : 'Driver upgrade: ${status.replaceAll('_', ' ')}')
             else const Text('Apply using your existing account. Driver review, payment verification and membership activation are required before driving.'),
             OutlinedButton(onPressed: _openUpgrade, child: Text(profile.canRequestDriverUpgrade

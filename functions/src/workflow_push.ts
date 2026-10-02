@@ -15,6 +15,10 @@ export const workflowBodies = {
   registration_rejected: "Your registration application has been reviewed.",
   registration_approved: "Your Ceylon Travel account has been approved.",
   registration_driver_approved: "Your driver application has been approved. Complete the remaining account steps.",
+  driver_upgrade_submitted: "A driver upgrade application is ready for review.",
+  driver_upgrade_correction_required: "Your driver upgrade application needs an update.",
+  driver_upgrade_rejected: "Your driver upgrade application has been reviewed.",
+  driver_upgrade_approved: "Your Driver/Partner upgrade was approved. Complete the remaining payment and membership steps to activate driver access.",
   identity_verified: "Your identity verification has been completed.",
   identity_action_required: "Your identity verification needs attention.",
   payment_submitted: "A driver payment is ready for review.",
@@ -126,9 +130,28 @@ export async function workflowNotice(port: WorkflowPort, event: WorkflowEvent): 
         current.actorUid !== d.actorUid || current.action !== d.action || current.newValue !== d.newValue ||
         !validWorkflowId(current.actorUid) || !Number.isSafeInteger(current.applicationRevision) ||
         (current.applicationRevision as number) < 1 || current.applicationRevision !== user.applicationRevision ||
-        current.newValue !== user.registrationStatus) return null;
+        d.applicationRevision !== current.applicationRevision) return null;
     const app = await port.read(`registration_applications/${uid}`);
-    if (!app || app.uid !== uid || app.applicationRevision !== user.applicationRevision ||
+    if (!app || app.uid !== uid || app.applicationRevision !== user.applicationRevision) return null;
+    if (app.purpose === "driver_upgrade") {
+      const state = String(current.newValue);
+      const states: Record<string, Kind> = {pending_review: "driver_upgrade_submitted",
+        correction_required: "driver_upgrade_correction_required", rejected: "driver_upgrade_rejected", approved: "driver_upgrade_approved"};
+      if (!Object.hasOwn(states, state) || current.purpose !== "driver_upgrade" || d.purpose !== current.purpose ||
+          app.targetAccountType !== "driver" || app.accountType !== "tourist" || user.uid !== uid ||
+          user.driverUpgradeStatus !== state || app.registrationStatus !== state ||
+          (state === "approved" && user.registrationStatus !== "approved") ||
+          user.accountType !== (state === "approved" ? "driver" : "tourist")) return null;
+      const submitted = state === "pending_review";
+      if (current.action !== (submitted ? "driver_upgrade_submitted" : `driver_upgrade_${state}`)) return null;
+      if (submitted) {
+        if (current.actorUid !== uid || app.operationId !== event.id || !time(app.submittedAt, current.createdAt)) return null;
+      } else if (app.reviewedBy !== current.actorUid || !time(app.reviewedAt, current.createdAt) ||
+          !role(await port.principal(current.actorUid), "admin")) return null;
+      return {type: states[state], audience: submitted ? "admin" : "owner", owner: uid, actor: current.actorUid,
+        identifiers: {accountUid: uid}};
+    }
+    if ((app.purpose != null && app.purpose !== "registration") || current.newValue !== user.registrationStatus ||
         app.registrationStatus !== user.registrationStatus) return null;
     const submitted = current.action === "application_submitted";
     const states: Record<string, Kind> = {correction_required: "registration_correction_required",

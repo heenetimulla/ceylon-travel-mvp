@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'registration_application.dart';
+import 'driver_administration.dart';
 
 /// Current account summary only. Application/evidence snapshots are not loaded.
 class AccountProfile {
@@ -16,6 +17,7 @@ class AccountProfile {
   String get city => _data['city'] is String ? _data['city'] as String : '';
   String get phoneNumber => value('phoneNumber');
   bool get isDriver => _data['accountType'] == 'driver';
+  bool get isOperationalDriver => isDriver && applicationOperational(_data) && driverCanBid(_data);
   String? get driverUpgradeStatus => _data['driverUpgradeStatus'] is String ? _data['driverUpgradeStatus'] as String : null;
   bool get canRequestDriverUpgrade => eligibleForDriverUpgrade(_data) && !_data.containsKey('driverUpgradeStatus');
   String get accountType => isDriver ? 'Driver' : 'Tourist / User';

@@ -148,6 +148,18 @@ void main() {
     final profile = AccountProfile({...store.data, 'status': 'active', 'driverUpgradeStatus': 42}, loginEmail: session.email);
     expect(profile.canRequestDriverUpgrade, isFalse);
   });
+  for (final activated in [false, true]) {
+    testWidgets('approved upgrade displays ${activated ? 'active membership' : 'remaining activation'} from trusted state', (tester) async {
+      store.data.addAll({'status': 'active', 'accountType': 'driver', 'driverUpgradeStatus': 'approved',
+        'registrationStatus': 'approved', 'identityVerificationStatus': 'verified',
+        'paymentStatus': activated ? 'verified' : 'pending', 'membershipStatus': activated ? 'active' : 'pending',
+        'accountStatus': activated ? 'active' : 'pending_approval', 'membershipPlan': 'founding_lifetime'});
+      await tester.pumpWidget(MaterialApp(home: ProfileSettingsScreen(service: service)));
+      await tester.pump();
+      final label = activated ? 'Driver upgrade approved — driver membership active' : 'Approved — payment/membership activation required';
+      await reveal(tester, find.text(label)); expect(find.text(label), findsOneWidget);
+    });
+  }
   for (final width in [360.0, 1400.0]) {
     testWidgets('driver trusted fields are read-only at $width', (tester) async {
       tester.view.physicalSize = Size(width, 900);

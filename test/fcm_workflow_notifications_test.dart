@@ -59,6 +59,14 @@ _Reader _account({bool driver = false, String registration = 'approved'}) {
   return reader;
 }
 
+_Reader _upgrade(String state) {
+  final reader = _account(driver: state == 'approved');
+  reader.docs['users/owner']!['driverUpgradeStatus'] = state;
+  reader.docs['registration_applications/owner']!.addAll({'purpose': 'driver_upgrade',
+    'accountType': 'tourist', 'targetAccountType': 'driver', 'registrationStatus': state});
+  return reader;
+}
+
 void main() {
   for (final type in TripChatPushIntent.workflowBodies.keys) {
     test('$type parses only identifiers and preserves session epoch', () {
@@ -231,5 +239,66 @@ void main() {
     await expectLater(WorkflowNotificationResolver(reader).resolve(_intent('support_admin_reply')), throwsStateError);
     reader.beforeRead = (_) async => throw StateError('permission-denied');
     await expectLater(WorkflowNotificationResolver(reader).resolve(_intent('support_admin_reply')), throwsStateError);
+  });
+  for (final state in ['correction_required', 'rejected']) {
+    test('upgrade $state opens current owner upgrade instead of active Tourist home', () async {
+      final reader = _upgrade(state);
+      final intent = _intent('driver_upgrade_$state');
+      final target = await WorkflowNotificationResolver(reader).resolve(intent);
+      expect(target, WorkflowDestination.application);
+      final screen = workflowNotificationDestination(intent, target) as RegistrationApplicationScreen;
+      expect(screen.uid, 'owner'); expect(screen.upgradeRequest, isTrue);
+      reader.uid = 'other';
+      await expectLater(WorkflowNotificationResolver(reader).resolve(_intent(intent.type, actor: 'other')), throwsStateError);
+    });
+  }
+  test('upgrade reviewer needs current primary claim; revoked and support-only users denied', () async {
+    final reader = _upgrade('pending_review')..uid = 'admin';
+    final intent = _intent('driver_upgrade_submitted', actor: 'admin');
+    for (final claims in <Map<String, dynamic>>[{}, {'supportAdmin': true}]) {
+      reader.claims = claims;
+      await expectLater(WorkflowNotificationResolver(reader).resolve(intent), throwsStateError);
+    }
+    reader.claims = {'admin': true};
+    final target = await WorkflowNotificationResolver(reader).resolve(intent);
+    expect(target, WorkflowDestination.adminApplication);
+    expect(workflowNotificationDestination(intent, target), isA<AdminUserDetailScreen>());
+    reader.beforeRead = (path) async {
+      if (path.startsWith('registration_applications/')) { reader.claims = {}; }
+    };
+    await expectLater(WorkflowNotificationResolver(reader).resolve(intent), throwsStateError);
+  });
+  test('upgrade tap rejects wrong purpose, owner, revision and session switch', () async {
+    for (final patch in [{'purpose': 'registration'}, {'uid': 'other'}, {'applicationRevision': 2}, {'registrationStatus': 'draft'}]) {
+      final reader = _upgrade('rejected'); reader.docs['registration_applications/owner']!.addAll(patch);
+      await expectLater(WorkflowNotificationResolver(reader).resolve(_intent('driver_upgrade_rejected')), throwsStateError);
+    }
+    final reader = _upgrade('rejected');
+    reader.beforeRead = (_) async { reader.epoch++; };
+    await expectLater(WorkflowNotificationResolver(reader).resolve(_intent('driver_upgrade_rejected')), throwsStateError);
+  });
+  test('upgrade approval routes to payment status until existing operational gates pass', () async {
+    final reader = _upgrade('approved');
+    final intent = _intent('driver_upgrade_approved');
+    expect(intent.body, contains('remaining payment and membership steps'));
+    expect(await WorkflowNotificationResolver(reader).resolve(intent), WorkflowDestination.driverStatus);
+    reader.docs['users/owner']!.addAll({'paymentStatus': 'verified', 'membershipStatus': 'active', 'membershipPlan': 'founding_lifetime'});
+    expect(await WorkflowNotificationResolver(reader).resolve(intent), WorkflowDestination.driverHome);
+    reader.docs['users/owner']!['accountStatus'] = 'suspended';
+    expect(await WorkflowNotificationResolver(reader).resolve(intent), WorkflowDestination.driverStatus);
+  });
+  test('upgrade payment and membership taps reuse existing destinations', () async {
+    final reader = _upgrade('approved');
+    for (final type in ['payment_verified', 'payment_rejected', 'membership_activated']) {
+      expect(await WorkflowNotificationResolver(reader).resolve(_intent(type)), WorkflowDestination.driverStatus);
+    }
+    reader.uid = 'admin'; reader.claims = {'admin': true};
+    expect(await WorkflowNotificationResolver(reader).resolve(_intent('payment_submitted', actor: 'admin')), WorkflowDestination.adminPayment);
+  });
+  test('logout clears upgrade pending intent through the existing session', () async {
+    TripChatPushIntent? pending;
+    final session = FcmSession(_Tokens(), onUserChanged: (_) => pending = null);
+    await session.changeUser('owner'); pending = _intent('driver_upgrade_approved');
+    final logout = session.beforeLogout('owner'); expect(pending, isNull); await logout;
   });
 }

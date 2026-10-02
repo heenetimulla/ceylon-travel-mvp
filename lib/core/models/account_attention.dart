@@ -21,7 +21,7 @@ String accountStatusLabel(Map<String, dynamic> user) {
 }
 
 enum RegistrationQueueFilter {
-  all('All'), tourist('Tourists'), driver('Drivers'), correction('Correction Required'), payment('Payment & Activation');
+  all('All'), tourist('Tourists'), driver('Drivers'), upgrade('Driver Upgrades'), correction('Correction Required'), payment('Payment & Activation');
   const RegistrationQueueFilter(this.label);
   final String label;
 }

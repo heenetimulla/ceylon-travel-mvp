@@ -13,6 +13,47 @@ import 'package:taxi_app/screens/auth/registration_application_screen.dart';
 import 'package:taxi_app/screens/driver/driver_home_screen.dart';
 
 void main() {
+  test('Upgrade summary keeps purpose, current state and latest upgrade time without private fields', () {
+    final stamp = Timestamp.fromDate(DateTime.utc(2026, 10, 2));
+    for (final approved in [false, true]) {
+      final row = RegistrationQueueRow.fromMap('upgrade', {'fullName': 'Upgrade Applicant',
+        'accountType': approved ? 'driver' : 'tourist', 'registrationStatus': 'approved',
+        'driverUpgradeStatus': approved ? 'approved' : 'pending_review', 'applicationRevision': 3,
+        'driverUpgradeSubmittedAt': stamp, 'applicationSubmittedAt': Timestamp.fromMillisecondsSinceEpoch(1),
+        'nicNumber': 'PRIVATE-NIC', 'drivingLicenceNumber': 'PRIVATE-DL', 'nicRegistryKey': 'PRIVATE-HMAC',
+      }, purpose: 'driver_upgrade');
+      expect(row.purposeLabel, 'Driver Upgrade'); expect(row.revision, 3);
+      expect(row.applicationState, approved ? 'approved' : 'pending_review');
+      expect(row.submittedAt, stamp.toDate().toUtc());
+      for (final secret in ['PRIVATE-NIC', 'PRIVATE-DL', 'PRIVATE-HMAC']) {
+        expect(row.user.matchesSearch(secret), isFalse);
+      }
+    }
+    expect(RegistrationQueueRow.fromMap('new-tourist', {'accountType': 'tourist'}, purpose: 'registration').purposeLabel, 'New Tourist registration');
+    expect(RegistrationQueueRow.fromMap('new-driver', {'accountType': 'driver'}, purpose: 'registration').purposeLabel, 'New Driver / Partner registration');
+  });
+  testWidgets('Upgrade filter, correction and payment handoff preserve the same identifiable applicant', (tester) async {
+    final queue = _QueueService()..upgrade = true;
+    await tester.pumpWidget(MaterialApp(home: AdminRegistrationQueueScreen(service: queue)));
+    await tester.pumpAndSettle();
+    expect(find.text('Upgrade Applicant'), findsOneWidget);
+    expect(find.textContaining('Driver Upgrade\nApplication: pending review'), findsOneWidget);
+    await tester.tap(find.text('Driver Upgrades')); await tester.pumpAndSettle();
+    expect(queue.last, RegistrationQueueFilter.upgrade); expect(find.text('Upgrade Applicant'), findsOneWidget);
+    queue.corrected = true;
+    await tester.tap(find.text('Correction Required')); await tester.pumpAndSettle();
+    expect(find.textContaining('Application: correction required'), findsOneWidget);
+    queue.approved = true;
+    await tester.tap(find.text('All')); await tester.pumpAndSettle();
+    expect(find.text('Upgrade Applicant'), findsNothing);
+    await tester.tap(find.text('Payment & Activation')); await tester.pumpAndSettle();
+    expect(find.text('Upgrade Applicant'), findsOneWidget);
+    expect(find.textContaining('Driver Upgrade'), findsWidgets);
+    expect(find.textContaining('AWAITING PAYMENT / MEMBERSHIP'), findsOneWidget);
+    await tester.tap(find.text('Driver Upgrades')); await tester.pumpAndSettle();
+    expect(find.text('Upgrade Applicant'), findsOneWidget);
+    expect(find.textContaining('PRIVATE'), findsNothing);
+  });
   test('Signed-in driver stays in status flow through payment and activation', () {
     final profile = <String, dynamic>{'status': 'active', 'accountType': 'driver', 'registrationStatus': 'approved',
       'identityVerificationStatus': 'verified', 'accountStatus': 'pending_approval', 'paymentStatus': 'pending',
@@ -113,6 +154,7 @@ class _Admin extends AdminService {
 class _QueueService extends AdminRegistrationQueueService {
   _QueueService() : super(admin: _Admin());
   bool approved = false;
+  bool upgrade = false, corrected = false;
   RegistrationQueueFilter? last;
   @override
   Future<RegistrationQueueCounts> counts() async => const RegistrationQueueCounts(3, 2, 1);
@@ -120,6 +162,19 @@ class _QueueService extends AdminRegistrationQueueService {
   Future<RegistrationQueuePage> page(RegistrationQueueFilter filter, {String? afterUid}) async {
     last = filter;
     final payment = filter == RegistrationQueueFilter.payment;
+    if (upgrade) {
+      if ((approved && !payment && filter != RegistrationQueueFilter.upgrade) ||
+          (!approved && payment) || (filter == RegistrationQueueFilter.correction && !corrected)) {
+        return RegistrationQueuePage([], null);
+      }
+      return RegistrationQueuePage([RegistrationQueueRow.fromMap('upgrade', {
+        'fullName': 'Upgrade Applicant', 'accountType': approved ? 'driver' : 'tourist',
+        'registrationStatus': 'approved', 'driverUpgradeStatus': approved ? 'approved' : corrected ? 'correction_required' : 'pending_review',
+        'accountStatus': approved ? 'pending_approval' : 'active', 'applicationRevision': 3,
+        'driverUpgradeSubmittedAt': Timestamp.fromDate(DateTime.utc(2026, 10, 2)),
+        'nicNumber': 'PRIVATE-NIC', 'drivingLicenceNumber': 'PRIVATE-DL',
+      }, purpose: 'driver_upgrade')], null);
+    }
     if (approved && !payment) { return RegistrationQueuePage([], null); }
     return RegistrationQueuePage([RegistrationQueueRow.fromMap('applicant', {
       'fullName': payment ? 'Approved Driver' : 'Applicant', 'accountType': payment ? 'driver' : 'tourist',

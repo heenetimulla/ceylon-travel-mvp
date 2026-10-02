@@ -138,7 +138,7 @@ At the Stage 13B checkpoint, upgrade approval was intentionally unavailable. Sta
 
 No quote, payment, entitlement, registration number, membership or bidding change occurs in Stage 13B. Stage 11D remains authoritative: a valid pre-cutoff LKR 3,500 quote locks founding lifetime membership, new post-cutoff quotes are LKR 5,000 with LKR 10,000 annual renewal; no LKR 1,500 top-up, per-trip commission, second counter or client tier calculation is introduced. After the future trusted transition, identity/payment/membership/account checks must all pass before operational driving.
 
-Upgrade audit actions use `driver_upgrade_*`, distinct from new-registration notification actions. Existing Stage 12 notification behavior is unchanged. A dedicated upgrade reviewer queue/notification and completion notification are reserved for Stage 13C; for now reviews are reachable through **Users & Drivers → account detail**.
+Upgrade audit actions use `driver_upgrade_*`, distinct from new-registration notification actions. Stage 13B preserved existing Stage 12 behavior and provided reviews through **Users & Drivers → account detail**. Stage 13C-2 below adds these events to the existing queue/notification architecture.
 
 ### Security and deployment implications
 
@@ -210,7 +210,7 @@ After automated verification and reviewed deployment, manually exercise approved
 
 ## Stage 13C-1: Trusted Upgrade Approval Transition
 
-**IMPLEMENTED — VERIFICATION PENDING.** Overall Stage 13 is not complete. No verification commands or deployments were executed for this change.
+**COMPLETE / VERIFIED**, as reported by the operator. Checkpoint: `b2feef9 Add trusted driver upgrade approval`. Overall Stage 13 is not complete. This statement does not claim deployment or verification of later Stage 13C-2 changes.
 
 The existing `processRegistrationApplication` Function processes the existing primary-admin `approve` operation; there is no new operation, Function export or client privilege. The authenticated, non-disabled actor must have `admin: true`. Support-only staff and applicants cannot approve. An eligible active Tourist with a current pending upgrade is required. Account/head/revision consistency is checked transactionally, including equality with the immutable submitted revision, upgrade purpose/target, Agreement 1.1 and matching trusted acceptance/submission timestamps.
 
@@ -222,21 +222,71 @@ No Auth account, quote, payment record, membership plan, entitlement, registrati
 
 The application head records the review decision. Immutable application history and `users/{uid}/admin_history` record `driver_upgrade_approved`, target UID, admin UID, revision, purpose, previous/resulting account type, resulting account status, server timestamp and operation ID, with no raw identity data. Submitted revisions and previous agreements are not edited. Retries of a completed operation no-op; concurrent or new-ID repeated approvals fail current-state checks after the first commit and cannot create a second transition/audit.
 
-The admin panel exposes **Approve Driver Upgrade** with confirmation explaining the same-account transition and remaining payment/membership requirements. The applicant's existing profile upgrade status and application/payment panel show approval without claiming operational activation. Existing secure routing reads current account state. Existing Stage 12 workflow notifications recognize ordinary `application_*` actions, not `driver_upgrade_*`; dedicated upgrade notification integration is deliberately left for Stage 13C-2 rather than generating duplicate or misleading events.
+The admin panel exposes **Approve Driver Upgrade** with confirmation explaining the same-account transition and remaining payment/membership requirements. The applicant's existing profile upgrade status and application/payment panel show approval without claiming operational activation. Existing secure routing reads current account state. Upgrade queue/notification integration was deferred at this checkpoint and is implemented separately in Stage 13C-2 below.
 
 No Firestore or Storage rules, dependencies, indexes, secrets, lifecycle logic or commercial rules change. Deploy the updated existing `processRegistrationApplication` Function after manual verification and release the updated Flutter review UI. Retain the existing HMAC secret and Function configuration.
 
 Test source updates cover primary-admin approval, same UID/profile/history preservation, rejected unauthorized actors, stale/malformed revisions and agreement, required driver fields/evidence, registry conflicts, Storage metadata changes, concurrent/replayed approval and payment-required activation. Flutter coverage checks confirmation/cancellation, current-revision operation submission, and non-operational approved drivers. Rules coverage checks admin command creation while denying direct account-type/approval/audit writes by every client, including admins.
 
-Verification still required: Flutter analysis and focused/full tests, Functions build/tests, Firestore rules regression, then reviewed Function deployment and browser/Android QA. Use the manual commands above. Live QA must confirm approved/legacy Tourist upgrades, rejected stale approvals, preserved original history, payment quote/slip/verification, final membership activation and only then driver bidding. Also verify disabled/revoked admins cannot submit a new approval and support-only accounts cannot review. Storage is unchanged, but its regression suite may be rerun manually.
+Stage 13C-1 verification is complete as reported by the operator. Retain its regression checklist for later changes: approved/legacy Tourist upgrades, rejected stale approvals, preserved original history, payment quote/slip/verification, final membership activation and only then driver bidding. Also verify disabled/revoked admins cannot submit a new approval and support-only accounts cannot review. Do not infer a production deployment from this verification status.
 
-## Stage 13C-2 / Stage 13C-3: Remaining work
+## Stage 13C-2: Admin Queue + Notification Integration
+
+**IMPLEMENTED — VERIFICATION PENDING.** No commands, tests, builds, deployments or device/browser QA were run during this stage. Overall Stage 13 remains incomplete.
+
+### Existing admin queue
+
+The existing Pending Registrations screen now includes accounts with either `registrationStatus` or `driverUpgradeStatus` in `pending_review`, `correction_required` or `rejected`. Correction Required covers either workflow. All, Tourists and Drivers retain their existing current-account-type semantics. New **Driver Upgrades** includes pending/correction/rejected and approved upgrade records, so promotion to `accountType: driver` does not erase their origin. Drafts remain outside the review queue. Approved records leave All/review queues and enter the unchanged Payment & Activation query when payment or membership needs attention; the upgrade filter also retains completed approved upgrades for reference.
+
+Queries still order by document ID and paginate 30 accounts with a document-ID cursor. Firestore OR filters deduplicate accounts; the existing aggregate attention count now includes upgrades. Payment/activation counts and conditions are unchanged. Each page reads at most 30 individual application heads to get the existing trusted `purpose`; only the safe purpose is retained. Application listing remains denied. Current status/revision/timestamps remain from `users/{uid}`, using `driverUpgradeSubmittedAt` for upgrades and `applicationSubmittedAt` for new registrations. A missing historical purpose falls back to the existing server-managed upgrade summary. No new source of operational truth or migration is introduced.
+
+Cards identify **New Tourist registration**, **New Driver / Partner registration**, or **Driver Upgrade**, with current account type, application state/revision, submission time and existing contact summary. NIC/DL, HMAC keys, reasons and evidence are not placed in card/search models. Rows open the existing protected detail. Upgrade detail explicitly identifies the original Tourist account, requested Driver / Partner role, purpose and current resulting account type. Private evidence controls are unchanged.
+
+One users composite index is added: `driverUpgradeStatus ASC, accountType ASC, __name__ ASC`, for the role-filtered upgrade branches. Existing registration and Payment & Activation composites are retained. Non-role upgrade queries use the existing automatic single-field indexing and document-ID order. Deploy the reviewed index and verify actual queries before live use. No entire-users scan or client-side pagination over a collection is used.
+
+### Existing workflow notifications
+
+The existing **notifyRegistrationReviewEvent** create trigger on immutable application history now recognizes trusted `driver_upgrade_*` actions. No Function export, token store, delivery implementation or notification channel is added. **syncNotificationStaffTokens**, shared token pagination/cleanup, `workflow_push_delivery` markers and delivery revalidation are reused unchanged.
+
+| Trusted event | Push type | Audience |
+| --- | --- | --- |
+| Submission/resubmission → pending_review | driver_upgrade_submitted | Primary admins only, excluding applicant/actor |
+| Correction requested | driver_upgrade_correction_required | Applicant only |
+| Rejected | driver_upgrade_rejected | Applicant only |
+| Approved | driver_upgrade_approved | Applicant only |
+
+Before delivery and before each device-page send, the worker rechecks user existence, same owner, purpose/target/source account type, application head/current revision, upgrade state, matching event/action/timestamp and review actor. Reviewed decisions require a current primary-admin actor. Staff candidates are revalidated through live Firebase Auth claims and disabled state; supportAdmin-only and ordinary users cannot receive upgrade review pushes. No client profile role field is trusted. New revisions have new immutable event IDs; retries retain the same marker and do not repeat a logical attempt.
+
+Bodies are fixed and generic. Approval says: “Your Driver/Partner upgrade was approved. Complete the remaining payment and membership steps to activate driver access.” Payload contains only `type` and `accountUid`. No identity numbers, phone, evidence paths, bank data, amounts, reasons or admin notes are copied. No application writes are performed by delivery. System/bookkeeping events are not new application history events, so no loop is introduced.
+
+The existing **at-most-once attempt** limitation remains: a crash/network failure or empty staff index after claiming a marker can lose delivery; FCM delivery is not exactly-once guaranteed. Temporary failures retain valid tokens; only permanently invalid tokens are removed safely. Reviewer candidates still require the existing login/token-refresh bootstrap. No historical event replay/backfill is included.
+
+### Tap routing, status and payment handoff
+
+The single Stage 12 parser/session/navigation host recognizes the four new types. Every asynchronous server read/claim refresh keeps existing UID/session-epoch checks. Reviewer taps require primary admin claims before and after loading, then open the existing gated account review screen only while the upgrade remains pending. Owner taps verify UID, purpose, head/revision and authoritative upgrade status, then open the existing correction/status screen or current driver payment/status flow. Already-operational drivers reach their dashboard only through the existing eligibility helpers, including annual expiry and account suspension. Stale or unauthorized results return through the existing safe home fallback.
+
+The Firebase notification reader now uses the existing bounded document-ID users query for non-owner admin profile reads: direct profile gets are owner-only under current rules. Private application heads still use authorized individual gets. No security rule is broadened.
+
+Profile/application status now distinguishes approved-but-awaiting-activation from driver membership active using trusted current eligibility, never `accountType` alone. Payment submission/verification/rejection and membership activation continue through **notifyDriverOperationCompleted** and existing types. No duplicate payment/identity/activation push is synthesized by upgrade approval. Quote issuance, founding entitlement/cutoff, commercial pricing, registration numbering and operational gates remain untouched.
+
+### Test source and manual verification
+
+Added/extended queue model/widget and rules-query fixtures for new registrations, upgrades, correction, pagination, safe summaries and approved payment handoff; notification tests for each event/audience, resubmission, stale/malformed records, revocation, sender suppression, dedupe, multiple devices, privacy, token cleanup and FCM failure isolation; resolver/profile tests for upgrade parsing/routing, claims, session switches, current operational state and logout. Existing Stage 12 test coverage is retained.
+
+All latest verification is **PENDING**: Flutter analyze; focused/full Flutter tests; Functions build/tests; Firestore rules regression; index deployment; updated Function deployment; Android emulator/physical device and browser QA. Existing manual commands above remain applicable. Additional focused Flutter source can be verified manually with:
+
+```bat
+flutter test test/stage_11d_registration_attention_test.dart test/fcm_workflow_notifications_test.dart test/stage_13_profile_test.dart test/registration_application_test.dart
+```
+
+After automated checks, deploy the new composite index and the updated existing `notifyRegistrationReviewEvent` Function, then release the client update. No new dependency, secret, permission, Firestore rule or Storage rule is required. Verify first submit, correction/resubmit, reject, approve, reviewer claim revocation, account switching, payment handoff and final membership activation using separate applicant/admin devices. Confirm old and upgraded driver payment notifications remain single events and no private content appears on lock screens. Stage 12A–D regressions remain part of the manual verification pass.
+
+## Stage 13C-3: Manual Phone Recovery
 
 **PENDING — NOT IMPLEMENTED.** Reserved work:
 
-1. Stage 13C-2: upgrade reviewer queue/notification and completion integration using the existing notification architecture; unrelated admin polish remains deferred.
-2. Stage 13C-3: manual phone-number recovery for users unable to access the old number: recovery request, identity proof/evidence, primary-admin review, trusted phone change and immutable audit containing old/new number snapshots, actor, timestamp and support/recovery reference. Notify after completion. Recovery must not modify identity status, account type, membership or payment state.
-3. Optional profile picture upload remains future work.
-4. Phone OTP remains deferred.
+1. Manual phone-number recovery for users unable to access the old number: recovery request, identity proof/evidence, primary-admin review, trusted phone change and immutable audit containing old/new number snapshots, actor, timestamp and support/recovery reference. Notify after completion. Recovery must not modify identity status, account type, membership or payment state.
+2. Optional profile picture upload remains future work.
+3. Phone OTP remains deferred.
 
 No manual recovery, profile upload, phone OTP, email-change flow or additional privileged transition was implemented in Stage 13B.
