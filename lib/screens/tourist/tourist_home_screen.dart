@@ -74,96 +74,99 @@ class _TouristHomeScreenState extends State<TouristHomeScreen> {
           ),
         ],
       ),
-      body: ListView(
-        padding: appPagePadding(context),
-        children: [
-          UserIdentityHeader(loadProfile: widget.loadProfile),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppColors.softBlue,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Need a driver for your Sri Lanka trip?',
-                  style: AppTextStyles.title,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Post your pickup, drop, passenger count, baggage, date and time. Drivers will send private bids.',
-                  style: AppTextStyles.secondary,
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.ocean,
-                    foregroundColor: AppColors.surface,
+      // Keep the subscription mounted when scrolling children leave the viewport.
+      body: StreamBuilder<List<TripPost>>(
+        stream: _posts,
+        builder: (context, snapshot) => ListView(
+          padding: appPagePadding(context),
+          children: [
+            UserIdentityHeader(loadProfile: widget.loadProfile),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.softBlue,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Need a driver for your Sri Lanka trip?',
+                    style: AppTextStyles.title,
                   ),
-                  onPressed: () => _openCreateTripPost(context),
-                  child: const Text('Create Trip'),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.ocean,
-                    side: const BorderSide(color: AppColors.border),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Post your pickup, drop, passenger count, baggage, date and time. Drivers will send private bids.',
+                    style: AppTextStyles.secondary,
                   ),
-                  onPressed: () => _openCompletedTrips(context),
-                  icon: const Icon(Icons.done_all_outlined),
-                  label: const Text('Completed Trips'),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.ocean,
+                      foregroundColor: AppColors.surface,
+                    ),
+                    onPressed: () => _openCreateTripPost(context),
+                    child: const Text('Create Trip'),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.ocean,
+                      side: const BorderSide(color: AppColors.border),
+                    ),
+                    onPressed: () => _openCompletedTrips(context),
+                    icon: const Icon(Icons.done_all_outlined),
+                    label: const Text('Completed Trips'),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          const AppSectionHeader(
-            'My Trips',
-            spacious: true,
-            subtitle: 'Your requests and current travel plans.',
-          ),
-          const SizedBox(height: 12),
-          StreamBuilder<List<TripPost>>(
-            stream: _posts,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
+            const SizedBox(height: 20),
+            const AppSectionHeader(
+              'My Trips',
+              spacious: true,
+              subtitle: 'Your requests and current travel plans.',
+            ),
+            const SizedBox(height: 12),
+            Builder(
+              builder: (context) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Column(
+                    children: [
+                      const Text(
+                        'Could not load your trip posts. Please try again.',
+                      ),
+                      TextButton(
+                        onPressed: _retryPosts,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  );
+                }
+                final posts = orderedActiveTrips(snapshot.data ?? const <TripPost>[]);
+                if (posts.isEmpty) {
+                  return const AppEmptyState(
+                    title: 'Your next journey starts here',
+                    message: "You haven't created any trip posts yet.",
+                  );
+                }
                 return Column(
                   children: [
-                    const Text(
-                      'Could not load your trip posts. Please try again.',
-                    ),
-                    TextButton(
-                      onPressed: _retryPosts,
-                      child: const Text('Retry'),
-                    ),
+                    for (final tripPost in posts)
+                      TripPostCard(
+                        tripPost: tripPost,
+                        onViewDetails: () => _openTripDetails(context, tripPost),
+                      ),
                   ],
                 );
-              }
-              final posts = orderedActiveTrips(snapshot.data ?? const <TripPost>[]);
-              if (posts.isEmpty) {
-                return const AppEmptyState(
-                  title: 'Your next journey starts here',
-                  message: "You haven't created any trip posts yet.",
-                );
-              }
-              return Column(
-                children: [
-                  for (final tripPost in posts)
-                    TripPostCard(
-                      tripPost: tripPost,
-                      onViewDetails: () => _openTripDetails(context, tripPost),
-                    ),
-                ],
-              );
-            },
-          ),
-        ],
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

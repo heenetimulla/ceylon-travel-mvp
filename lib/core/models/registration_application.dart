@@ -37,10 +37,9 @@ bool eligibleForDriverUpgrade(Map<String, dynamic> profile) =>
 bool applicationOperational(Map<String, dynamic> profile) {
   if (profile['status'] != 'active' || !['tourist', 'driver'].contains(profile['accountType'])) { return false; }
   if ((profile['accountStatus'] ?? profile['status']) != 'active') { return false; }
-  // New profile creation requires draft; only pre-rollout profiles lack this field.
-  if (!profile.containsKey('registrationStatus')) { return true; }
-  return profile['registrationStatus'] == 'approved' &&
-    (profile['accountType'] != 'driver' || driverCanBid(profile));
+  // Legacy profiles may lack registrationStatus, but driver eligibility is mandatory.
+  if (profile.containsKey('registrationStatus') && profile['registrationStatus'] != 'approved') { return false; }
+  return profile['accountType'] != 'driver' || driverCanBid(profile);
 }
 
 String driverActivationMessage(Map<String, dynamic> profile) {

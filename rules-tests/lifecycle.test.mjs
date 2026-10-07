@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {before, after, beforeEach, test} from 'node:test';
 import {initializeTestEnvironment, assertSucceeds} from '@firebase/rules-unit-testing';
-import {doc, getDocFromServer, setDoc, updateDoc, runTransaction, writeBatch, serverTimestamp, Timestamp} from 'firebase/firestore';
+import {doc, collection, query, where, getDocs, getDocFromServer, setDoc, updateDoc, runTransaction, writeBatch, serverTimestamp, Timestamp} from 'firebase/firestore';
 
 // Isolated demo project and an explicitly configured local emulator only.
 // No Admin SDK or production credentials are used by any tested operation.
@@ -184,12 +184,30 @@ for (const [label, mutate] of [
     await assertDenied(updateDoc(doc(db, tripPath), parentPayload(at, mutate(at))));
   });
 }
-test('legacy active driver behavior remains unchanged', async () => {
+test('legacy driver without trusted eligibility cannot read trips or request start', async () => {
   await seed({uid: driverUid, status: 'active', accountType: 'driver'});
   const db = env.authenticatedContext(driverUid).firestore();
-  await assertSucceeds(createAnchor(db));
-  await assertSucceeds(publishStart(db));
+  await assertDenied(getDocFromServer(doc(db, tripPath)));
+  await assertDenied(setDoc(doc(db, anchorPath), {requestedBy: driverUid, createdAt: serverTimestamp()}));
 });
+
+for (const patch of [{}, {paymentStatus: 'pending'}, {membershipStatus: 'pending'},
+  {identityVerificationStatus: 'pending'}, {accountStatus: 'suspended'},
+  {membershipPlan: 'standard_annual', membershipValidUntil: Timestamp.fromMillis(1)}]) {
+  test('legacy driver eligibility still applies: ' + JSON.stringify(patch), async () => {
+    const profile = driver(patch);
+    delete profile.registrationStatus;
+    await seed(profile);
+    const db = env.authenticatedContext(driverUid).firestore();
+    if (Object.keys(patch).length === 0) {
+      await assertSucceeds(createAnchor(db));
+      await assertSucceeds(publishStart(db));
+    } else {
+      await assertDenied(getDocFromServer(doc(db, tripPath)));
+      await assertDenied(setDoc(doc(db, anchorPath), {requestedBy: driverUid, createdAt: serverTimestamp()}));
+    }
+  });
+}
 
 // Acceptance and cancellation retain their reciprocal writes and actor checks.
 async function seedOpenWithSubmittedBid() {
@@ -334,4 +352,34 @@ test('all four lifecycle routes retain confirmation roles, end deadline and comp
   }
   await assertSucceeds(batch.commit());
   assert.equal((await getDocFromServer(doc(creatorDb, tripPath))).data().status, 'completed');
+});
+
+// Stage 14: an open feed read never grants access to a previous chat assignment.
+test('reopen and reassignment revoke old driver chat reads while creator retains history', async () => {
+  await seed();
+  const messagePath = tripPath + '/messages/old-assignment';
+  await env.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), messagePath), {
+      id: 'old-assignment', tripId: 'start-regression', senderId: touristUid,
+      senderRole: 'creator', assignmentDriverId: driverUid, messageType: 'text',
+      text: 'Private old assignment', latitude: null, longitude: null, createdAt: serverTimestamp(),
+    });
+  });
+  const oldDriver = env.authenticatedContext(driverUid).firestore();
+  const creator = env.authenticatedContext(touristUid).firestore();
+  const replacement = env.authenticatedContext('other-driver').firestore();
+  const oldMessages = query(collection(oldDriver, tripPath + '/messages'), where('assignmentDriverId', '==', driverUid));
+  await assertSucceeds(getDocFromServer(doc(oldDriver, messagePath)));
+  await assertSucceeds(getDocs(oldMessages));
+  for (const patch of [
+    {status: 'open', acceptedDriverId: null, acceptedBidId: null},
+    {status: 'accepted', acceptedDriverId: 'other-driver', acceptedBidId: 'other-driver'},
+  ]) {
+    await env.withSecurityRulesDisabled(context => updateDoc(doc(context.firestore(), tripPath), patch));
+    await assertDenied(getDocFromServer(doc(oldDriver, messagePath)));
+    await assertDenied(getDocs(oldMessages));
+    await assertDenied(getDocFromServer(doc(replacement, messagePath)));
+    await assertSucceeds(getDocFromServer(doc(creator, messagePath)));
+    await assertSucceeds(getDocs(collection(creator, tripPath + '/messages')));
+  }
 });

@@ -55,6 +55,8 @@ void main() {
         store.docs['trip_posts/trip-1'] = parent;
         store.docs['users/creator-1'] = {
           'status': 'active', 'accountType': partner ? 'driver' : 'tourist',
+          if (partner) ...{'accountStatus': 'active', 'identityVerificationStatus': 'verified',
+            'paymentStatus': 'verified', 'membershipStatus': 'active', 'membershipPlan': 'founding_lifetime'},
         };
         final submitted = acceptedBid.copyWith(status: 'submitted').toFirestore();
         if (withBids) {
@@ -105,7 +107,9 @@ void main() {
     test('Accepted cancellation retains original bid update: driver=$byDriver', () async {
       final uid = byDriver ? 'driver-1' : 'creator-1';
       final store = _Store();
-      store.docs['users/$uid'] = {'status': 'active', 'accountType': 'driver'};
+      store.docs['users/$uid'] = {'status': 'active', 'accountType': 'driver',
+        'accountStatus': 'active', 'identityVerificationStatus': 'verified', 'paymentStatus': 'verified',
+        'membershipStatus': 'active', 'membershipPlan': 'founding_lifetime'};
       store.docs['trip_posts/trip-1'] = acceptedTrip().toFirestore();
       store.docs['trip_posts/trip-1/bids/driver-1'] = acceptedBid.toFirestore();
       final losingBid = acceptedBid.copyWith(status: 'submitted').toFirestore()

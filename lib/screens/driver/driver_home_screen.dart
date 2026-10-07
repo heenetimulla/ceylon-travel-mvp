@@ -84,128 +84,131 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         title: const Text('Driver Dashboard'),
         actions: [IconButton(tooltip: 'Account & Support', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountScreen())), icon: const Icon(Icons.account_circle_outlined)), const LogoutButton()],
       ),
-      body: ListView(
-        padding: appPagePadding(context),
-        children: [
-          UserIdentityHeader(loadProfile: widget.loadProfile),
-          Card(child: ListTile(
-            leading: const Icon(Icons.verified_user_outlined),
-            title: const Text('Driver verification & membership'),
-            subtitle: const Text('Submit your identity details and check your membership.'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              final uid = FirebaseAuth.instance.currentUser?.uid;
-              if (uid == null) { return; }
-              Navigator.push(context, MaterialPageRoute<void>(builder: (_) => DriverRegistrationStatusScreen(uid: uid)));
-            },
-          )),
-          const SizedBox(height: 20),
-          const Text('Your driver workspace', style: AppTextStyles.section),
-          const SizedBox(height: 8),
-          const Text(
-            'Drivers choose their own bid price. Bids stay private for the post creator.',
-            style: AppTextStyles.secondary,
-          ),
-          const SizedBox(height: 14),
-          const AppSectionHeader(
-            'Partner Hires',
-            spacious: true,
-            subtitle: 'Create and manage hires for your customers.',
-          ),
-          Card(
-            color: AppColors.surface,
-            child: ListTile(
-              leading: const Icon(
-                Icons.post_add_outlined,
-                color: AppColors.ocean,
+      // Keep the subscription mounted when scrolling children leave the viewport.
+      body: StreamBuilder<List<TripPost>>(
+        stream: _posts,
+        builder: (context, snapshot) => ListView(
+          padding: appPagePadding(context),
+          children: [
+            UserIdentityHeader(loadProfile: widget.loadProfile),
+            Card(child: ListTile(
+              leading: const Icon(Icons.verified_user_outlined),
+              title: const Text('Driver verification & membership'),
+              subtitle: const Text('Submit your identity details and check your membership.'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                final uid = FirebaseAuth.instance.currentUser?.uid;
+                if (uid == null) { return; }
+                Navigator.push(context, MaterialPageRoute<void>(builder: (_) => DriverRegistrationStatusScreen(uid: uid)));
+              },
+            )),
+            const SizedBox(height: 20),
+            const Text('Your driver workspace', style: AppTextStyles.section),
+            const SizedBox(height: 8),
+            const Text(
+              'Drivers choose their own bid price. Bids stay private for the post creator.',
+              style: AppTextStyles.secondary,
+            ),
+            const SizedBox(height: 14),
+            const AppSectionHeader(
+              'Partner Hires',
+              spacious: true,
+              subtitle: 'Create and manage hires for your customers.',
+            ),
+            Card(
+              color: AppColors.surface,
+              child: ListTile(
+                leading: const Icon(
+                  Icons.post_add_outlined,
+                  color: AppColors.ocean,
+                ),
+                title: const Text('Create Hire Post'),
+                subtitle: const Text('Post a hire for your customer.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _openCreateHirePost(context),
               ),
-              title: const Text('Create Hire Post'),
-              subtitle: const Text('Post a hire for your customer.'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openCreateHirePost(context),
             ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CreatorTripPostsScreen()),
-            ),
-            icon: const Icon(Icons.list_alt_outlined),
-            label: const Text('My hire posts'),
-          ),
-          const SizedBox(height: 12),
-          const AppSectionHeader('Assigned Work', spacious: true),
-          Card(
-            color: AppColors.softBlue,
-            child: ListTile(
-              leading: const Icon(Icons.assignment_turned_in_outlined),
-              title: const Text('My accepted trips'),
-              subtitle: const Text('View trips assigned to you.'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.push(
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const AcceptedDriverTripsScreen(),
+                MaterialPageRoute(builder: (_) => const CreatorTripPostsScreen()),
+              ),
+              icon: const Icon(Icons.list_alt_outlined),
+              label: const Text('My hire posts'),
+            ),
+            const SizedBox(height: 12),
+            const AppSectionHeader('Assigned Work', spacious: true),
+            Card(
+              color: AppColors.softBlue,
+              child: ListTile(
+                leading: const Icon(Icons.assignment_turned_in_outlined),
+                title: const Text('My accepted trips'),
+                subtitle: const Text('View trips assigned to you.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AcceptedDriverTripsScreen(),
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _openCompletedTrips(context),
-              icon: const Icon(Icons.done_all_outlined),
-              label: Text('Completed Trips'),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _openCompletedTrips(context),
+                icon: const Icon(Icons.done_all_outlined),
+                label: Text('Completed Trips'),
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
-          const AppSectionHeader(
-            'Available Trips & Active Hires',
-            spacious: true,
-            subtitle: 'Open requests first, followed by your active hires and assigned trips.',
-          ),
-          StreamBuilder<List<TripPost>>(
-            stream: _posts,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (snapshot.hasError) {
+            const SizedBox(height: 18),
+            const AppSectionHeader(
+              'Available Trips & Active Hires',
+              spacious: true,
+              subtitle: 'Open requests first, followed by your active hires and assigned trips.',
+            ),
+            Builder(
+              builder: (context) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Column(
+                    children: [
+                      const Text('Could not load trip posts. Please try again.'),
+                      TextButton(
+                        onPressed: _retryPosts,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  );
+                }
+                final posts = orderedActiveTrips(snapshot.data ?? const <TripPost>[]);
+                if (posts.isEmpty) {
+                  return const AppEmptyState(
+                    title: 'No trips available',
+                    message:
+                        'No open or active trips are available right now. Check back for new requests.',
+                  );
+                }
                 return Column(
                   children: [
-                    const Text('Could not load trip posts. Please try again.'),
-                    TextButton(
-                      onPressed: _retryPosts,
-                      child: const Text('Retry'),
-                    ),
+                    for (final tripPost in posts)
+                      TripPostCard(
+                        tripPost: tripPost,
+                        onViewDetails: () => _openTripDetails(context, tripPost),
+                        onSubmitBid: tripPost.status == 'open' && Firebase.apps.isNotEmpty &&
+                            tripPost.creatorId != FirebaseAuth.instance.currentUser?.uid
+                            ? () => _openSubmitBid(context, tripPost) : null,
+                      ),
                   ],
                 );
-              }
-              final posts = orderedActiveTrips(snapshot.data ?? const <TripPost>[]);
-              if (posts.isEmpty) {
-                return const AppEmptyState(
-                  title: 'No trips available',
-                  message:
-                      'No open or active trips are available right now. Check back for new requests.',
-                );
-              }
-              return Column(
-                children: [
-                  for (final tripPost in posts)
-                    TripPostCard(
-                      tripPost: tripPost,
-                      onViewDetails: () => _openTripDetails(context, tripPost),
-                      onSubmitBid: tripPost.status == 'open' && Firebase.apps.isNotEmpty &&
-                          tripPost.creatorId != FirebaseAuth.instance.currentUser?.uid
-                          ? () => _openSubmitBid(context, tripPost) : null,
-                    ),
-                ],
-              );
-            },
-          ),
-        ],
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

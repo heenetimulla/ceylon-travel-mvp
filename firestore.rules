@@ -146,7 +146,7 @@ service cloud.firestore {
       // Missing registrationStatus is a pre-application legacy profile, never a new client create.
       return p.get('registrationStatus', 'approved') == 'approved'
         && p.get('accountStatus', p.status) == 'active'
-        && (!('registrationStatus' in p) || p.accountType != 'driver' || operationalDriverProfile(p));
+        && (p.accountType != 'driver' || operationalDriverProfile(p));
     }
     function approvedAccount(uid) {
       return approvedAccountProfile(get(/databases/$(database)/documents/users/$(uid)).data);
@@ -782,7 +782,8 @@ service cloud.firestore {
       // performing driver, and updates/deletes are denied. Keep parent access intact.
       return isSignedIn() && hasActiveProfile()
         && (request.auth.uid == t.creatorId
-          || (canGetTripPost(t) && d.assignmentDriverId == request.auth.uid));
+          || (canReadTripChat(t) && t.acceptedDriverId == request.auth.uid
+             && d.assignmentDriverId == request.auth.uid));
     }
     function validTripChatMessage(tripId, messageId) {
       // Validate the final parent too, including a simultaneous cancellation/completion.

@@ -19,13 +19,14 @@ import '../chat/trip_chat_screen.dart';
 import '../../core/models/trip_chat_message.dart';
 
 class LifecycleTripScreen extends StatefulWidget {
-  const LifecycleTripScreen({super.key, required this.tripId});
+  const LifecycleTripScreen({super.key, required this.tripId, this.service});
   final String tripId;
+  final TripLifecycleService? service;
   @override
   State<LifecycleTripScreen> createState() => _LifecycleTripScreenState();
 }
 class _LifecycleTripScreenState extends State<LifecycleTripScreen> {
-  late final _service = TripLifecycleService();
+  late final _service = widget.service ?? TripLifecycleService();
   late final _actor = _service.uid;
   StreamSubscription<TripPost>? _subscription;
   Timer? _timer;
@@ -35,6 +36,7 @@ class _LifecycleTripScreenState extends State<LifecycleTripScreen> {
   String? _bidId;
   Stream<DocumentSnapshot<Map<String, dynamic>>>? _bid;
   Stream<Rating?>? _rating;
+  int _generation = 0;
   @override
   void initState() {
     super.initState(); _subscribe();
@@ -44,18 +46,39 @@ class _LifecycleTripScreenState extends State<LifecycleTripScreen> {
     });
   }
   void _subscribe() {
+    final generation = ++_generation;
     _subscription?.cancel();
-    _subscription = _service.watchTrip(widget.tripId).listen((trip) {
-      if (!mounted) return;
-      setState(() {
-        _trip = trip; _error = null;
-        if (trip.acceptedBidId != _bidId) {
-          _bidId = trip.acceptedBidId;
-          _bid = _bidId == null ? null : FirebaseFirestore.instance.collection('trip_posts').doc(trip.id).collection('bids').doc(_bidId).snapshots();
+    try {
+      // A signed-out direct entry can fail before a stream is returned.
+      final actor = _actor;
+      _subscription = _service.watchTrip(widget.tripId).listen((trip) {
+        if (!mounted || generation != _generation) return;
+        if (actor != trip.creatorId && actor != trip.acceptedDriverId) {
+          _loseAccess(generation);
+          return;
         }
-        if (trip.status == 'completed' && _rating == null) _rating = RatingService().watchOwnRating(trip);
-      });
-    }, onError: (_) { if (mounted) setState(() => _error = 'This trip is unavailable. It may have reopened or your access may have changed.'); });
+        setState(() {
+          _trip = trip; _error = null;
+          if (trip.acceptedBidId != _bidId) {
+            _bidId = trip.acceptedBidId;
+            _bid = _bidId == null ? null : FirebaseFirestore.instance.collection('trip_posts').doc(trip.id).collection('bids').doc(_bidId).snapshots();
+          }
+          if (trip.status == 'completed' && _rating == null) _rating = RatingService().watchOwnRating(trip);
+        });
+      }, onError: (_) => _loseAccess(generation));
+    } catch (_) {
+      _loseAccess(generation);
+    }
+  }
+  void _loseAccess(int generation) {
+    if (!mounted || generation != _generation) return;
+    setState(() {
+      _trip = null;
+      _bidId = null;
+      _bid = null;
+      _rating = null;
+      _error = 'This trip is unavailable. It may have reopened or your access may have changed.';
+    });
   }
   Future<void> _act(LifecycleAction action) async {
     if (_busy) return;
@@ -79,7 +102,7 @@ class _LifecycleTripScreenState extends State<LifecycleTripScreen> {
     } finally { if (mounted) setState(() => _busy = false); }
   }
   @override
-  void dispose() { _timer?.cancel(); _subscription?.cancel(); super.dispose(); }
+  void dispose() { _generation++; _timer?.cancel(); _subscription?.cancel(); super.dispose(); }
   @override
   Widget build(BuildContext context) {
     final trip = _trip;

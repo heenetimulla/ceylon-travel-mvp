@@ -12,16 +12,18 @@ import '../../core/widgets/info_line.dart';
 import '../../core/widgets/trip_cancellation_button.dart';
 
 class TouristBidListScreen extends StatefulWidget {
-  const TouristBidListScreen({super.key, required this.tripPost});
+  const TouristBidListScreen({super.key, required this.tripPost, this.tripStream, this.bidsStream});
 
   final TripPost tripPost;
+  final Stream<TripPost>? tripStream;
+  final Stream<List<Bid>>? bidsStream;
 
   @override
   State<TouristBidListScreen> createState() => _TouristBidListScreenState();
 }
 
 class _TouristBidListScreenState extends State<TouristBidListScreen> {
-  final BidService _bidService = BidService();
+  late final BidService _bidService = BidService();
   late Stream<List<Bid>> _bidsStream;
   late Stream<TripPost> _tripStream;
   bool _isAccepting = false;
@@ -30,24 +32,25 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
   @override
   void initState() {
     super.initState();
-    _bidsStream = _bidService.watchCreatorBids(widget.tripPost);
-    _tripStream = _bidService.watchCreatorTrip(widget.tripPost);
+    _bidsStream = widget.bidsStream ?? _bidService.watchCreatorBids(widget.tripPost);
+    _tripStream = widget.tripStream ?? _bidService.watchCreatorTrip(widget.tripPost);
   }
 
   @override
   void didUpdateWidget(covariant TouristBidListScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.tripPost.id != widget.tripPost.id ||
-        oldWidget.tripPost.creatorId != widget.tripPost.creatorId) {
-      _bidsStream = _bidService.watchCreatorBids(widget.tripPost);
-      _tripStream = _bidService.watchCreatorTrip(widget.tripPost);
+        oldWidget.tripPost.creatorId != widget.tripPost.creatorId ||
+        oldWidget.tripStream != widget.tripStream || oldWidget.bidsStream != widget.bidsStream) {
+      _bidsStream = widget.bidsStream ?? _bidService.watchCreatorBids(widget.tripPost);
+      _tripStream = widget.tripStream ?? _bidService.watchCreatorTrip(widget.tripPost);
     }
   }
 
   void _retry() {
     setState(() {
-      _bidsStream = _bidService.watchCreatorBids(widget.tripPost);
-      _tripStream = _bidService.watchCreatorTrip(widget.tripPost);
+      _bidsStream = widget.bidsStream ?? _bidService.watchCreatorBids(widget.tripPost);
+      _tripStream = widget.tripStream ?? _bidService.watchCreatorTrip(widget.tripPost);
     });
   }
 
@@ -130,76 +133,70 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
     );
   }
 
-  Widget _buildBids(TripPost trip) {
-    return StreamBuilder<List<Bid>>(
-      key: ObjectKey(_bidsStream),
-      stream: _bidsStream,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          final error = snapshot.error;
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Text(
-                  error is BidServiceException
-                      ? error.message
-                      : 'Could not load bids. Please try again.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton(onPressed: _retry, child: const Text('Retry')),
-              ],
-            ),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Column(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(height: 12),
-                Text('Loading driver bids...'),
-              ],
-            ),
-          );
-        }
-        final bids = snapshot.data!;
-        if (bids.isEmpty) {
-          return const AppEmptyState(
-            title: 'No driver bids yet.',
-            message: 'New bids will appear here automatically.',
-            icon: Icons.local_offer_outlined,
-          );
-        }
-        return Column(
+  Widget _buildBids(TripPost trip, AsyncSnapshot<List<Bid>> snapshot) {
+    if (snapshot.hasError) {
+      final error = snapshot.error;
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
           children: [
-            if (TripPost.assignedStatuses.contains(trip.status))
-              for (final bid in bids)
-                if (bid.id == trip.acceptedBidId) _acceptedSummary(bid),
-            for (final bid in bids)
-              BidCard(
-                key: ValueKey(bid.id),
-                bid: bid,
-                effectiveStatus: bid.effectiveStatusFor(trip),
-                isSaving: _savingBidId == bid.id,
-                onAccept:
-                    !_isAccepting &&
-                        trip.status == 'open' &&
-                        trip.acceptedBidId == null &&
-                        trip.acceptedDriverId == null &&
-                        bid.effectiveStatusFor(trip) == 'submitted'
-                    ? () => _confirmAcceptBid(trip, bid)
-                    : null,
-              ),
+            Text(
+              error is BidServiceException
+                  ? error.message
+                  : 'Could not load bids. Please try again.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(onPressed: _retry, child: const Text('Retry')),
           ],
-        );
-      },
+        ),
+      );
+    }
+    if (!snapshot.hasData) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(height: 12),
+            Text('Loading driver bids...'),
+          ],
+        ),
+      );
+    }
+    final bids = snapshot.data!;
+    if (bids.isEmpty) {
+      return const AppEmptyState(
+        title: 'No driver bids yet.',
+        message: 'New bids will appear here automatically.',
+        icon: Icons.local_offer_outlined,
+      );
+    }
+    return Column(
+      children: [
+        if (TripPost.assignedStatuses.contains(trip.status))
+          for (final bid in bids)
+            if (bid.id == trip.acceptedBidId) _acceptedSummary(bid),
+        for (final bid in bids)
+          BidCard(
+            key: ValueKey(bid.id),
+            bid: bid,
+            effectiveStatus: bid.effectiveStatusFor(trip),
+            isSaving: _savingBidId == bid.id,
+            onAccept:
+                !_isAccepting &&
+                    trip.status == 'open' &&
+                    trip.acceptedBidId == null &&
+                    trip.acceptedDriverId == null &&
+                    bid.effectiveStatusFor(trip) == 'submitted'
+                ? () => _confirmAcceptBid(trip, bid)
+                : null,
+          ),
+      ],
     );
   }
 
@@ -207,103 +204,108 @@ class _TouristBidListScreenState extends State<TouristBidListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppPageAppBar(title: const Text('Driver Bids')),
-      body: StreamBuilder<TripPost>(
-        key: ObjectKey(_tripStream),
-        stream: _tripStream,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            final error = snapshot.error;
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+      // Both listeners outlive scrolling children and temporary parent errors.
+      body: StreamBuilder<List<Bid>>(
+        key: ObjectKey(_bidsStream),
+        stream: _bidsStream,
+        builder: (context, bids) => StreamBuilder<TripPost>(
+          key: ObjectKey(_tripStream),
+          stream: _tripStream,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              final error = snapshot.error;
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      error is BidServiceException
+                          ? error.message
+                          : 'Could not load this trip.',
+                      textAlign: TextAlign.center,
+                    ),
+                    TextButton(onPressed: _retry, child: const Text('Retry')),
+                  ],
+                ),
+              );
+            }
+            if (!snapshot.hasData) {
+              return const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              );
+            }
+            final tripPost = snapshot.data!;
+            return SafeArea(
+              child: ListView(
+                padding: appPagePadding(context),
                 children: [
-                  Text(
-                    error is BidServiceException
-                        ? error.message
-                        : 'Could not load this trip.',
-                    textAlign: TextAlign.center,
+                  Card(
+                    color: AppColors.surface,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Trip summary',
+                            style: AppTextStyles.section,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            '${tripPost.pickup} -> ${tripPost.drop}',
+                            style: AppTextStyles.cardTitle,
+                          ),
+                          const SizedBox(height: 8),
+                          InfoLine(
+                            icon: Icons.calendar_month_outlined,
+                            text: tripPost.dateTime,
+                          ),
+                          InfoLine(
+                            icon: Icons.group_outlined,
+                            text: tripPost.passengers,
+                          ),
+                          InfoLine(
+                            icon: Icons.luggage_outlined,
+                            text: tripPost.baggage,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  TextButton(onPressed: _retry, child: const Text('Retry')),
+                  const SizedBox(height: 12),
+                  const Card(
+                    color: AppColors.softBlue,
+                    child: Padding(
+                      padding: EdgeInsets.all(14),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.lock_outline, color: AppColors.ocean),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Bids are private. Only you can see driver prices.',
+                              style: AppTextStyles.cardTitle,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (['open', 'accepted'].contains(tripPost.status) &&
+                      !_isAccepting)
+                    TripCancellationButton(trip: tripPost, byDriver: false),
+                  if (tripPost.status == 'cancelled')
+                    const Text('This trip has been cancelled.'),
+                  if (TripPost.assignedStatuses.contains(tripPost.status))
+                    FilledButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LifecycleTripScreen(tripId: tripPost.id))), child: const Text('Manage Trip / View Status')),
+                  _buildBids(tripPost, bids),
                 ],
               ),
             );
-          }
-          if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            );
-          }
-          final tripPost = snapshot.data!;
-          return SafeArea(
-            child: ListView(
-              padding: appPagePadding(context),
-              children: [
-                Card(
-                  color: AppColors.surface,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Trip summary',
-                          style: AppTextStyles.section,
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '${tripPost.pickup} -> ${tripPost.drop}',
-                          style: AppTextStyles.cardTitle,
-                        ),
-                        const SizedBox(height: 8),
-                        InfoLine(
-                          icon: Icons.calendar_month_outlined,
-                          text: tripPost.dateTime,
-                        ),
-                        InfoLine(
-                          icon: Icons.group_outlined,
-                          text: tripPost.passengers,
-                        ),
-                        InfoLine(
-                          icon: Icons.luggage_outlined,
-                          text: tripPost.baggage,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Card(
-                  color: AppColors.softBlue,
-                  child: Padding(
-                    padding: EdgeInsets.all(14),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.lock_outline, color: AppColors.ocean),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Bids are private. Only you can see driver prices.',
-                            style: AppTextStyles.cardTitle,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                if (['open', 'accepted'].contains(tripPost.status) &&
-                    !_isAccepting)
-                  TripCancellationButton(trip: tripPost, byDriver: false),
-                if (tripPost.status == 'cancelled')
-                  const Text('This trip has been cancelled.'),
-                if (TripPost.assignedStatuses.contains(tripPost.status))
-                  FilledButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LifecycleTripScreen(tripId: tripPost.id))), child: const Text('Manage Trip / View Status')),
-                _buildBids(tripPost),
-              ],
-            ),
-          );
-        },
+          },
+        ),
       ),
     );
   }

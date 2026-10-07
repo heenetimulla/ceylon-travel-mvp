@@ -44,7 +44,9 @@ void main() {
     db.docs['trip_posts/trip-1'] = acceptedTrip().toFirestore()..['tripReference'] = 'CT-260910-ABC234';
     for (final uid in ['creator-1', 'driver-1', 'driver-2']) {
       db.docs['users/$uid'] = {'status':'active','accountType':'driver','fullName':uid,'phoneNumber':'+94771234567',
-        'completedTripsCount':0,'ratingsCount':0,'averageRating':0.0,'ratingStarsTotal':0};
+        'completedTripsCount':0,'ratingsCount':0,'averageRating':0.0,'ratingStarsTotal':0,
+        'accountStatus':'active','identityVerificationStatus':'verified','paymentStatus':'verified',
+        'membershipStatus':'active','membershipPlan':'founding_lifetime'};
     }
     return db;
   }
