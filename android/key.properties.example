@@ -1,0 +1,8 @@
+# Copy locally to android/key.properties; never commit the populated file.
+# Values intentionally blank. Obtain/create the protected upload key separately.
+# Use an absolute path with forward slashes on Windows, or a path relative to android/.
+# Java properties escaping applies to passwords and backslashes.
+storeFile=
+storePassword=
+keyAlias=
+keyPassword=

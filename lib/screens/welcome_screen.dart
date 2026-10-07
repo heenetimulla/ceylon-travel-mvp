@@ -2,7 +2,6 @@ import '../core/widgets/app_components.dart';
 import '../app/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
-import 'auth/account_type_screen.dart';
 import 'auth/login_screen.dart';
 import 'auth/registration_screen.dart';
 
@@ -20,13 +19,6 @@ class WelcomeScreen extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const RegistrationScreen()),
-    );
-  }
-
-  void _openDemoFlow(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AccountTypeScreen()),
     );
   }
 
@@ -69,14 +61,6 @@ class WelcomeScreen extends StatelessWidget {
                     child: OutlinedButton(
                       onPressed: () => _openRegister(context),
                       child: Text('Register'),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: () => _openDemoFlow(context),
-                      child: Text('View Demo Flow'),
                     ),
                   ),
                   const SizedBox(height: 30),

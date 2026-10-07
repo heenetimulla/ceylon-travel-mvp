@@ -21,7 +21,8 @@ Future<void> pumpToWelcome(WidgetTester tester) async {
   expect(find.text('Discover Sri Lanka, your way'), findsOneWidget);
   expect(find.text('Login'), findsOneWidget);
   expect(find.text('Register'), findsOneWidget);
-  expect(find.text('View Demo Flow'), findsOneWidget);
+  expect(find.text('View Demo Flow'), findsNothing);
+  expect(find.text('Admin Demo'), findsNothing);
 }
 
 void main() {

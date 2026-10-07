@@ -1,3 +1,14 @@
+# Local release signing and credentials (never commit real values).
+key.properties
+*.jks
+*.keystore
+.env
+.env.*
+!.env.example
+service-account*.json
+serviceAccount*.json
+*-firebase-adminsdk-*.json
+
 # Miscellaneous
 *.class
 *.log
