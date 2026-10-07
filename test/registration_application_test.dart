@@ -57,6 +57,7 @@ void main() {
   for (final driver in [false, true]) {
     testWidgets('${driver ? 'Driver' : 'Tourist'} sees only required role-specific inputs and private uploads', (tester) async {
       await tester.pumpWidget(_panel(_Service(_profile(driver: driver)))); await tester.pumpAndSettle();
+      expect(find.text(driver ? 'New Driver/Partner registration' : 'New Tourist registration'), findsOneWidget);
       expect(find.byKey(const ValueKey('application_nicNumber')), findsOneWidget);
       expect(find.byKey(const ValueKey('application_drivingLicenceNumber')), driver ? findsOneWidget : findsNothing);
       expect(find.byType(DriverEvidenceUpload), findsNWidgets(driver ? 3 : 2));
@@ -165,6 +166,7 @@ void main() {
     expect(service.profile['registrationStatus'], 'approved');
     expect(find.byKey(const ValueKey('startDriverUpgrade')), findsNothing);
     expect(find.text('Status: draft'), findsOneWidget);
+    expect(find.text('Driver Upgrade'), findsOneWidget);
   });
   testWidgets('legacy Tourist with unconfirmed operation cannot submit a duplicate draft', (tester) async {
     final profile = {..._profile(status: 'approved'), 'accountStatus': 'active'}..remove('registrationStatus');

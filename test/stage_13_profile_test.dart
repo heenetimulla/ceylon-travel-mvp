@@ -156,7 +156,7 @@ void main() {
         'accountStatus': activated ? 'active' : 'pending_approval', 'membershipPlan': 'founding_lifetime'});
       await tester.pumpWidget(MaterialApp(home: ProfileSettingsScreen(service: service)));
       await tester.pump();
-      final label = activated ? 'Driver upgrade approved — driver membership active' : 'Approved — payment/membership activation required';
+      final label = activated ? 'Driver upgrade approved — driver membership active' : 'Driver upgrade approved — payment/membership activation required';
       await reveal(tester, find.text(label)); expect(find.text(label), findsOneWidget);
     });
   }
@@ -316,7 +316,7 @@ void main() {
       await tester.pump();
       await reveal(tester, find.text('View driver upgrade'));
       expect(find.text('Become a Driver / Partner'), findsNothing);
-      expect(find.text(status == 'approved' ? 'Approved — payment/membership activation required'
+      expect(find.text(status == 'approved' ? 'Driver upgrade approved — payment/membership activation required'
         : 'Driver upgrade: ${status.replaceAll('_', ' ')}'), findsOneWidget);
     });
   }

@@ -189,7 +189,8 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
     final app = data.application ?? {};
     final editable = !widget.admin && ['draft', 'correction_required', 'rejected'].contains(data.status);
     return AppInfoCard(children: [
-      Row(children: [Expanded(child: AppSectionHeader(data.isUpgrade ? 'Driver / Partner upgrade' : 'Registration application')),
+      Row(children: [Expanded(child: AppSectionHeader(data.isUpgrade ? 'Driver Upgrade'
+        : driver ? 'New Driver/Partner registration' : 'New Tourist registration')),
         IconButton(onPressed: _saving || _busyPhotos.isNotEmpty ? null : _load, tooltip: 'Refresh application', icon: const Icon(Icons.refresh))]),
       Text('Status: ${data.status.replaceAll('_', ' ')}'), Text('Application revision: ${data.revision}'),
       Text('Account status: ${data.profile['accountStatus'] ?? 'Not available'}'),

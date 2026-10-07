@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../auth/session_navigation.dart';
 import '../../core/services/driver_administration_service.dart';
 import '../../core/widgets/app_components.dart';
 import '../../core/widgets/driver_administration_panel.dart';
@@ -14,7 +15,8 @@ class _DriverRegistrationStatusScreenState extends State<DriverRegistrationStatu
   late final _service = widget.service ?? DriverAdministrationService();
   late final _owner = _service.watchOwner();
   @override
-  Widget build(BuildContext context) => Scaffold(appBar: const AppPageAppBar(title: Text('Driver verification & membership')),
+  Widget build(BuildContext context) => Scaffold(appBar: const AppPageAppBar(
+    title: Text('Driver verification & membership'), actions: [LogoutButton()]),
     body: StreamBuilder<String?>(stream: _owner, builder: (context, snapshot) {
       if (snapshot.connectionState == ConnectionState.waiting) {
         return const Center(child: CircularProgressIndicator());

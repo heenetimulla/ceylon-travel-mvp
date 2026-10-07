@@ -1,4 +1,6 @@
 import '../../core/models/registration_application.dart';
+import '../../core/models/driver_administration.dart';
+import '../driver/driver_registration_status_screen.dart';
 import 'registration_application_screen.dart';
 import 'registration_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -86,6 +88,11 @@ class _LogoutButtonState extends State<LogoutButton> {
 }
 
 Widget sessionDestination(String uid, Map<String, dynamic> data) {
+  // Legacy registration compatibility must not bypass driver membership gates.
+  if (data['accountType'] == 'driver' && !data.containsKey('registrationStatus') &&
+      (!applicationOperational(data) || !driverCanBid(data))) {
+    return DriverRegistrationStatusScreen(uid: uid);
+  }
   if (!applicationOperational(data)) { return RegistrationApplicationScreen(uid: uid); }
   return data['accountType'] == 'driver' ? const DriverHomeScreen() : const TouristHomeScreen();
 }

@@ -21,7 +21,7 @@ class RegistrationQueueRow {
   final String purpose;
   final String? applicationState;
   String get purposeLabel => purpose == 'driver_upgrade' ? 'Driver Upgrade'
-    : user.accountType == 'driver' ? 'New Driver / Partner registration' : 'New Tourist registration';
+    : user.accountType == 'driver' ? 'New Driver/Partner registration' : 'New Tourist registration';
 }
 class RegistrationQueuePage {
   RegistrationQueuePage(this.rows, this.nextUid);

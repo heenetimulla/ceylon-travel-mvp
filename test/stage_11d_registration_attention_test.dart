@@ -11,8 +11,29 @@ import 'package:taxi_app/screens/admin/admin_registration_queue_screen.dart';
 import 'package:taxi_app/screens/auth/session_navigation.dart';
 import 'package:taxi_app/screens/auth/registration_application_screen.dart';
 import 'package:taxi_app/screens/driver/driver_home_screen.dart';
+import 'package:taxi_app/screens/driver/driver_registration_status_screen.dart';
 
 void main() {
+  test('Legacy driver startup requires trusted operational eligibility', () {
+    final profile = <String, dynamic>{'status': 'active', 'accountType': 'driver',
+      'accountStatus': 'active'};
+    expect(sessionDestination('driver', profile), isA<DriverRegistrationStatusScreen>());
+    profile['identityVerificationStatus'] = 'verified';
+    expect(sessionDestination('driver', profile), isA<DriverRegistrationStatusScreen>());
+    profile['paymentStatus'] = 'verified';
+    expect(sessionDestination('driver', profile), isA<DriverRegistrationStatusScreen>());
+    profile.addAll({'membershipStatus': 'active', 'membershipPlan': 'founding_lifetime'});
+    expect(sessionDestination('driver', profile), isA<DriverHomeScreen>());
+    for (final field in ['status', 'accountStatus']) {
+      expect(sessionDestination('driver', {...profile, field: 'inactive'}),
+        isA<DriverRegistrationStatusScreen>());
+    }
+    profile.addAll({'membershipPlan': 'standard_annual',
+      'membershipValidUntil': DateTime.utc(2000)});
+    expect(sessionDestination('driver', profile), isA<DriverRegistrationStatusScreen>());
+    profile['membershipValidUntil'] = DateTime.now().add(const Duration(days: 1));
+    expect(sessionDestination('driver', profile), isA<DriverHomeScreen>());
+  });
   test('Upgrade summary keeps purpose, current state and latest upgrade time without private fields', () {
     final stamp = Timestamp.fromDate(DateTime.utc(2026, 10, 2));
     for (final approved in [false, true]) {
@@ -30,7 +51,7 @@ void main() {
       }
     }
     expect(RegistrationQueueRow.fromMap('new-tourist', {'accountType': 'tourist'}, purpose: 'registration').purposeLabel, 'New Tourist registration');
-    expect(RegistrationQueueRow.fromMap('new-driver', {'accountType': 'driver'}, purpose: 'registration').purposeLabel, 'New Driver / Partner registration');
+    expect(RegistrationQueueRow.fromMap('new-driver', {'accountType': 'driver'}, purpose: 'registration').purposeLabel, 'New Driver/Partner registration');
   });
   testWidgets('Upgrade filter, correction and payment handoff preserve the same identifiable applicant', (tester) async {
     final queue = _QueueService()..upgrade = true;

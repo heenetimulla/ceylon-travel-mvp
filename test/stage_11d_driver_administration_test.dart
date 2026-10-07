@@ -311,6 +311,7 @@ void main() {
   testWidgets('Driver owner submits numbers inline without uploads or approval controls', (tester) async {
     final service = _DriverService(DriverAdministration(profile: data().profile));
     await tester.pumpWidget(MaterialApp(home: DriverRegistrationStatusScreen(uid: 'driver', service: service)));
+    expect(find.byTooltip('Logout'), findsOneWidget);
     await pump(tester);
     expect(find.text('Identity verification'), findsOneWidget);
     expect(find.byKey(const ValueKey('driver_input_nicNumber')), findsOneWidget);
