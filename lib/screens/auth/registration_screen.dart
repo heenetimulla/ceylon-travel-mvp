@@ -263,7 +263,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Choose your account type and enter your details. Next, upload identity documents and accept the guidelines. Creating login credentials does not approve your account.',
+                      'All fields are required. Choose your account type and enter your details. Next, upload identity documents and accept the guidelines. Creating login credentials does not approve your account.',
                       style: AppTextStyles.secondary,
                     ),
                     const SizedBox(height: 22),
@@ -333,14 +333,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           key: const Key('touristAccountTypeChip'),
                           label: const Text('Tourist/User'),
                           selected: selectedAccountType == AccountType.tourist,
-                          onSelected: (_) =>
+                          materialTapTargetSize: MaterialTapTargetSize.padded,
+                          onSelected: isRegistering ? null : (_) =>
                               _selectAccountType(AccountType.tourist),
                         ),
                         ChoiceChip(
                           key: const Key('driverAccountTypeChip'),
-                          label: const Text('Driver'),
+                          label: const Text('Driver/Partner'),
                           selected: selectedAccountType == AccountType.driver,
-                          onSelected: (_) =>
+                          materialTapTargetSize: MaterialTapTargetSize.padded,
+                          onSelected: isRegistering ? null : (_) =>
                               _selectAccountType(AccountType.driver),
                         ),
                       ],
@@ -349,6 +351,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       const SizedBox(height: 22),
                       DropdownButtonFormField<String>(
                         isExpanded: true,
+                        isDense: false,
+                        itemHeight: null,
                         initialValue: vehicleType,
                         items: [
                           for (final type in BidService.vehicleTypes)
@@ -361,7 +365,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           labelText: 'Vehicle type',
                           helperText:
                               'Your primary vehicle. You may offer a different vehicle for each bid.',
-                          helperMaxLines: 2,
+                          helperMaxLines: 4,
                           prefixIcon: Icon(Icons.directions_car_outlined),
                         ),
                       ),

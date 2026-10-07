@@ -196,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: _isLoading ? null : _login,
-                      child: Text('Login'),
+                      child: Text(_isLoading ? 'Signing in...' : 'Login'),
                     ),
                   ),
                   const SizedBox(height: 16),

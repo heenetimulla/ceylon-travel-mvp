@@ -76,7 +76,7 @@ class AppTheme {
           minimumSize: const Size(48, 48),
           shape: shape,
           foregroundColor: AppColors.ocean,
-          side: const BorderSide(color: AppColors.border),
+          side: const BorderSide(color: AppColors.secondary),
           textStyle: AppTextStyles.button,
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         ),
@@ -93,6 +93,7 @@ class AppTheme {
         fillColor: AppColors.surface,
         labelStyle: AppTextStyles.secondary,
         hintStyle: AppTextStyles.secondary,
+        hintMaxLines: 3,
         helperStyle: AppTextStyles.caption,
         errorMaxLines: 3,
         contentPadding: const EdgeInsets.symmetric(
@@ -101,11 +102,11 @@ class AppTheme {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: const BorderSide(color: AppColors.secondary),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: const BorderSide(color: AppColors.secondary),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -120,10 +121,20 @@ class AppTheme {
         contentTextStyle: AppTextStyles.body,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.softBlue,
-        selectedColor: AppColors.softBlue,
-        labelStyle: AppTextStyles.button,
-        side: BorderSide.none,
+        color: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) return AppColors.border;
+          return states.contains(WidgetState.selected)
+              ? AppColors.ocean : AppColors.surface;
+        }),
+        labelStyle: AppTextStyles.button.copyWith(color: AppColors.charcoal),
+        secondaryLabelStyle: AppTextStyles.button.copyWith(
+          color: WidgetStateColor.resolveWith((states) =>
+            states.contains(WidgetState.disabled)
+                ? AppColors.charcoal : AppColors.surface),
+        ),
+        checkmarkColor: AppColors.surface,
+        showCheckmark: true,
+        side: const BorderSide(color: AppColors.secondary),
         shape: shape,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       ),

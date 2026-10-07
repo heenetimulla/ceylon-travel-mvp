@@ -176,6 +176,8 @@ class _SubmitBidScreenState extends State<SubmitBidScreen> {
                 ),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
+                  isDense: false,
+                  itemHeight: null,
                   initialValue: vehicleType,
                   decoration: const InputDecoration(labelText: 'Vehicle type'),
                   items: [

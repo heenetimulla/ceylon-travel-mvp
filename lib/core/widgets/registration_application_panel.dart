@@ -236,7 +236,7 @@ class _RegistrationApplicationPanelState extends State<RegistrationApplicationPa
         Text('Login email: ${data.profile['email'] ?? ''}'),
         if (driver) ...[
           DropdownButtonFormField<String>(initialValue: vehicleTypes.contains(_vehicle) ? _vehicle : null,
-            isExpanded: true, decoration: const InputDecoration(labelText: 'Vehicle type'),
+            isExpanded: true, isDense: false, itemHeight: null, decoration: const InputDecoration(labelText: 'Vehicle type'),
             items: [for (final type in vehicleTypes) DropdownMenuItem(value: type, child: Text(type))],
             onChanged: _enabled ? (value) => setState(() => _vehicle = value) : null,
             validator: (value) => value == null ? 'Choose a vehicle type.' : null),

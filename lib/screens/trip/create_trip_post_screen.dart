@@ -156,7 +156,10 @@ class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
             const SizedBox(height: 18),
             AppInfoCard(
               children: [
-                const AppSectionHeader('Route & schedule'),
+                const AppSectionHeader(
+                  'Route & schedule',
+                  subtitle: 'Pickup, drop, date and time are required.',
+                ),
                 TextField(
                   controller: pickupController,
                   decoration: const InputDecoration(
@@ -175,22 +178,19 @@ class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _pickDate,
-                        icon: const Icon(Icons.calendar_month_outlined),
-                        label: Text(_dateText),
-                      ),
+                    OutlinedButton.icon(
+                      onPressed: _pickDate,
+                      icon: const Icon(Icons.calendar_month_outlined),
+                      label: Text(_dateText),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _pickTime,
-                        icon: const Icon(Icons.access_time),
-                        label: Text(_timeText(context)),
-                      ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _pickTime,
+                      icon: const Icon(Icons.access_time),
+                      label: Text(_timeText(context)),
                     ),
                   ],
                 ),
@@ -235,6 +235,8 @@ class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
                 const AppSectionHeader('Vehicle & requests'),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
+                  isDense: false,
+                  itemHeight: null,
                   initialValue: vehiclePreference,
                   decoration: const InputDecoration(
                     labelText: 'Vehicle preference',
@@ -272,7 +274,7 @@ class _CreateTripPostScreenState extends State<CreateTripPostScreen> {
                   controller: notesController,
                   maxLines: 4,
                   decoration: const InputDecoration(
-                    labelText: 'Notes / special request',
+                    labelText: 'Notes (optional)',
                     hintText: 'Example: Need English-speaking driver',
                     prefixIcon: Icon(Icons.notes_outlined),
                   ),

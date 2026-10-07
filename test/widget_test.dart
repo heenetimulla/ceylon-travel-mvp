@@ -125,7 +125,7 @@ void main() {
 
     expect(find.text('Start your registration application'), findsOneWidget);
     expect(find.text('Tourist/User'), findsOneWidget);
-    expect(find.text('Driver'), findsOneWidget);
+    expect(find.text('Driver/Partner'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
     expect(find.text('Email optional'), findsNothing);
 
