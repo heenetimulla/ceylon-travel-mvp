@@ -85,6 +85,7 @@ export async function executeDeadline(db: Firestore, tripId: string, phase: Phas
     // New registration applications cannot participate even through trusted timers.
     // Legacy trips retain their established Stage 10 policy.
     for (const uid of [trip.creatorId, trip.acceptedDriverId] as string[]) {
+      if ((await tx.get(db.collection("account_deletion_blocks").doc(uid))).exists) return "noop";
       const profile = (await tx.get(db.collection("users").doc(uid))).data();
       if (profile?.registrationStatus != null && (profile.registrationStatus !== "approved" || profile.accountStatus !== "active")) return "noop";
     }

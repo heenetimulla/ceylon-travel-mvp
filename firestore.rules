@@ -3,7 +3,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null
+        && !exists(/databases/$(database)/documents/account_deletion_blocks/$(request.auth.uid));
     }
 
     function isOwner(userId) {
@@ -14,6 +15,63 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && request.auth.token.get('admin', false) == true;
     }
+
+
+    // Stage 17A: one current request per UID. Absence means not_requested.
+    function recentDeletionAuth() {
+      let time = request.auth.token.get('auth_time', 0);
+      return time is int && time > 0 && time * 1000 <= request.time.toMillis()
+        && request.time.toMillis() - time * 1000 <= 300000;
+    }
+    function validDeletionRequest(uid, d) {
+      return isOwner(uid) && recentDeletionAuth()
+        && exists(/databases/$(database)/documents/users/$(uid))
+        && d.keys().hasAll(['requesterUid', 'requestedAt', 'status', 'reason', 'updatedAt', 'revision',
+          'reviewedBy', 'reviewedAt', 'completionAt', 'processingStage', 'userMessage'])
+        && d.keys().hasOnly(['requesterUid', 'requestedAt', 'status', 'reason', 'updatedAt', 'revision',
+          'reviewedBy', 'reviewedAt', 'completionAt', 'processingStage', 'userMessage'])
+        && d.requesterUid == uid && d.status == 'pending'
+        && d.reason is string && d.reason.size() <= 500 && d.updatedAt == request.time;
+    }
+    match /account_deletion_requests/{uid} {
+      // A restricted session can only fetch its request status until Auth expires.
+      allow get: if (request.auth != null && request.auth.uid == uid) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if validDeletionRequest(uid, request.resource.data)
+        && request.resource.data.requestedAt == request.time && request.resource.data.revision == 1
+        && request.resource.data.reviewedBy == null && request.resource.data.reviewedAt == null
+        && request.resource.data.completionAt == null && request.resource.data.processingStage == null
+        && request.resource.data.userMessage == null;
+      allow update: if validDeletionRequest(uid, request.resource.data)
+        && resource.data.status in ['rejected', 'needs_clarification']
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'reason', 'updatedAt', 'revision']);
+      allow delete: if false;
+      match /operations/{id} {
+        allow read: if isAdmin();
+        allow create: if isAdmin() && request.auth.uid != uid
+          && request.resource.data.keys().hasAll(['actorUid', 'action', 'expectedRevision', 'note', 'userMessage', 'status', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['actorUid', 'action', 'expectedRevision', 'note', 'userMessage', 'status', 'createdAt'])
+          && request.resource.data.actorUid == request.auth.uid
+          && request.resource.data.action in ['approve', 'reject', 'request_clarification', 'complete']
+          && request.resource.data.expectedRevision is int && request.resource.data.expectedRevision > 0
+          && request.resource.data.note is string && request.resource.data.note.size() <= 1000
+          && request.resource.data.userMessage is string && request.resource.data.userMessage.size() <= 500
+          && request.resource.data.status == 'pending' && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+      match /audit/{id} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+      match /private/{id} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+    // Permanent backend-only barrier survives stale or accidentally restored profile fields.
+    match /account_deletion_blocks/{uid} { allow read, write: if false; }
 
     function commonFields() {
       return [
@@ -149,7 +207,8 @@ service cloud.firestore {
         && (p.accountType != 'driver' || operationalDriverProfile(p));
     }
     function approvedAccount(uid) {
-      return approvedAccountProfile(get(/databases/$(database)/documents/users/$(uid)).data);
+      return !exists(/databases/$(database)/documents/account_deletion_blocks/$(uid))
+        && approvedAccountProfile(get(/databases/$(database)/documents/users/$(uid)).data);
     }
     function validDriverUpgradeOperation(uid, d) {
       let p = get(/databases/$(database)/documents/users/$(uid)).data;
@@ -272,7 +331,8 @@ service cloud.firestore {
             && p.get('membershipValidUntil', null) is timestamp && p.membershipValidUntil > request.time));
     }
     function operationalDriver(uid) {
-      return operationalDriverProfile(get(/databases/$(database)/documents/users/$(uid)).data);
+      return !exists(/databases/$(database)/documents/account_deletion_blocks/$(uid))
+        && operationalDriverProfile(get(/databases/$(database)/documents/users/$(uid)).data);
     }
 
     function exactTripPostFields(data) {
@@ -408,6 +468,7 @@ service cloud.firestore {
         && after.acceptedBidId is string && after.acceptedBidId.size() > 0
         && after.acceptedDriverId is string && after.acceptedDriverId.size() > 0
         && after.acceptedDriverId != before.creatorId
+        && !exists(/databases/$(database)/documents/account_deletion_blocks/$(after.acceptedDriverId))
         && after.updatedAt == request.time
         && exists(bidPath)
         && get(bidPath).data.status == 'submitted'

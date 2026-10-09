@@ -4,9 +4,18 @@
       "collectionGroup": "users",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "driverUpgradeStatus", "order": "ASCENDING"},
-        {"fieldPath": "accountType", "order": "ASCENDING"},
-        {"fieldPath": "__name__", "order": "ASCENDING"}
+        {
+          "fieldPath": "driverUpgradeStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "accountType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
@@ -162,6 +171,62 @@
         {
           "fieldPath": "createdAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "trip_posts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "creatorId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "trip_posts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "acceptedDriverId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "trip_posts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "touristId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "trip_posts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "driverId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
         }
       ]
     }

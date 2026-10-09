@@ -24,7 +24,7 @@ export async function syncPublicProfile(db: Firestore, uid: string): Promise<voi
     const user = await tx.get(db.collection("users").doc(uid));
     const reputation = await tx.get(db.collection("user_reputation").doc(uid));
     const target = db.collection("user_public_profiles").doc(uid);
-    if (!user.exists || (user.data()!.registrationStatus != null &&
+    if ((await tx.get(db.collection("account_deletion_blocks").doc(uid))).exists || !user.exists || (user.data()!.registrationStatus != null &&
         (user.data()!.registrationStatus !== "approved" || user.data()!.accountStatus !== "active"))) { tx.delete(target); return; }
     tx.set(target, publicProfile(uid, user.data()!, reputation.data()));
   });
@@ -49,6 +49,10 @@ export async function syncPublicReview(db: Firestore, tripId: string, direction:
       throw new Error("Invalid source rating; public review not published");
     }
     const target = db.collection("user_public_profiles").doc(targetUid).collection("reviews").doc(`${tripId}_${direction}`);
+    if ((await tx.get(db.collection("account_deletion_blocks").doc(targetUid))).exists ||
+        (await tx.get(db.collection("account_deletion_blocks").doc(authorUid))).exists) {
+      tx.delete(target); return;
+    }
     tx.set(target, {
       stars: rating.stars, comment: rating.comment.trim(),
       createdAt: rating.createdAt ?? null, tripReference: trip.tripReference ?? null,

@@ -60,7 +60,7 @@ class AuthService {
     final email = user.email;
     if (email == null || !user.providerData.any((p) => p.providerId == 'password')) {
       throw FirebaseAuthException(code: 'unsupported-provider',
-        message: 'Phone changes require email and password sign-in. Contact support.');
+        message: 'This change requires email and password sign-in. Contact support.');
     }
     await user.reauthenticateWithCredential(
       EmailAuthProvider.credential(email: email, password: password),

@@ -14,6 +14,8 @@ import {executeDeadline, pendingDeadline, Phase, tripIdFromPayload} from "./life
 import {syncPublicProfile, syncPublicReview} from "./public_profiles";
 export {processDriverAdministration, processRegistrationApplication} from "./driver_administration_trigger";
 
+export {processAccountDeletion} from "./account_deletion_trigger";
+
 initializeApp();
 const db = getFirestore();
 const region = defineString("LIFECYCLE_REGION", {default: "asia-southeast1"});

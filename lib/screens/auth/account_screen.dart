@@ -1,6 +1,7 @@
 import '../../core/models/registration_application.dart';
 import 'registration_application_screen.dart';
 import 'profile_settings_screen.dart';
+import 'account_deletion_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/support_service.dart';
@@ -56,6 +57,9 @@ class _AccountScreenState extends State<AccountScreen> {
       FilledButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportFormScreen())), child: const Text('Contact Us / Support')),
       const SizedBox(height: 12),
       OutlinedButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportRequestsScreen())), child: const Text('My Support Requests')),
+      ListTile(leading: const Icon(Icons.person_remove_outlined), title: const Text('Delete Account'),
+        subtitle: const Text('Request deletion or view status'),
+        onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const AccountDeletionScreen()))),
       const AdminDashboardEntry(),
       const AdminSupportEntry(),
     ]),

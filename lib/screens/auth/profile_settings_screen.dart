@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'account_deletion_screen.dart';
 import 'package:flutter/material.dart';
 import '../../core/models/account_profile.dart';
 import '../../core/services/profile_service.dart';
@@ -87,6 +88,11 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         final initials = profile.fullName.split(RegExp(r'\s+')).take(2)
           .where((part) => part.isNotEmpty).map((part) => part.characters.first).join().toUpperCase();
         return ListView(padding: appPagePadding(context), children: [
+          ListTile(leading: const Icon(Icons.person_remove_outlined),
+            title: const Text('Delete Account'), subtitle: const Text('Request deletion and view request status'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+              builder: (_) => const AccountDeletionScreen()))),
           AppInfoCard(children: [
             Row(children: [CircleAvatar(radius: 28, child: Text(initials)),
               const SizedBox(width: 16), Expanded(child: Column(

@@ -124,6 +124,9 @@ export async function processDriverOperation(db: Firestore, uid: string, operati
       const reason = string(operation.reason ?? "", 500, false);
       const userRef = db.doc(`users/${uid}`), verificationRef = db.doc(`driver_verifications/${uid}`);
       const user = (await tx.get(userRef)).data();
+      requireValue(!(await tx.get(db.doc(`account_deletion_blocks/${uid}`))).exists &&
+        !(await tx.get(db.doc(`account_deletion_blocks/${actor.uid}`))).exists,
+        "account-deletion", "Account deletion prevents this operation.");
       requireValue(user?.accountType === "driver", "not-driver", "This workflow is only for driver accounts.");
       if (user.registrationStatus != null) {
         requireValue(!["submit_identity", "verify_identity", "reject_identity"].includes(action),

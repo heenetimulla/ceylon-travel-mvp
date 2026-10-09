@@ -124,6 +124,7 @@ export function firestoreDeliveryPort(db: Firestore, messaging: Messaging,
       return true;
     }),
     async *tokens(uid) {
+      if ((await db.collection("account_deletion_blocks").doc(uid).get()).exists) return;
       const collection = db.collection("users").doc(uid).collection("fcm_tokens");
       let cursor: string | undefined;
       while (true) {

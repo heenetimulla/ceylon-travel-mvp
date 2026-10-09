@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'admin_deletion_requests_screen.dart';
 import '../../app/app_text_styles.dart';
 import '../../core/models/admin_dashboard_stats.dart';
 import '../../core/models/support_request.dart';
@@ -73,6 +74,11 @@ class _OverviewState extends State<_Overview> {
       final data = snapshot.data!;
       return ListView(padding: appPagePadding(context), children: [
         PendingRegistrationsEntry(admin: widget.service),
+        Card(child: ListTile(leading: const Icon(Icons.person_remove_outlined),
+          title: const Text('Account deletion requests'),
+          subtitle: const Text('Primary administrator review and processing'),
+          onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+            builder: (_) => const AdminDeletionRequestsScreen())))),
         Card(child: ListTile(key: const Key('admin_support_entry'),
           leading: const Icon(Icons.support_agent), title: const Text('Support & Complaints'),
           subtitle: const Text('Review conversations and manage support requests'),

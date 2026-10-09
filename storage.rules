@@ -1,10 +1,13 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    function deletionAccessAllowed() {
+      return request.auth != null && !firestore.exists(/databases/(default)/documents/account_deletion_blocks/$(request.auth.uid));
+    }
     match /driver_evidence/{uid}/{revision}/{kind}/{file} {
       function applicant() {
         let p = firestore.get(/databases/(default)/documents/users/$(uid)).data;
-        return request.auth != null && request.auth.uid == uid && p.accountType == 'driver' && !('registrationStatus' in p)
+        return deletionAccessAllowed() && request.auth.uid == uid && p.accountType == 'driver' && !('registrationStatus' in p)
           && p.get('driverAdminRevision', 0) == int(revision)
           && p.get('identityVerificationStatus', 'pending') != 'verified';
       }
@@ -22,7 +25,7 @@ service firebase.storage {
           && int(m.width) >= 400 && int(m.width) <= edge
           && int(m.height) >= 400 && int(m.height) <= edge;
       }
-      allow get: if request.auth != null && (request.auth.uid == uid
+      allow get: if deletionAccessAllowed() && (request.auth.uid == uid
         || ('admin' in request.auth.token && request.auth.token.admin == true));
       // Append-only objects. Replacement uses a fresh random name; historical evidence cannot be edited/deleted.
       allow write: if request.resource != null && resource == null && applicant() && validImage();
@@ -35,7 +38,7 @@ service firebase.storage {
           && p.get('registrationStatus', 'approved') == 'approved'
           && p.get('accountStatus', p.status) == 'active'
           && p.get('driverUpgradeStatus', '') in ['draft', 'correction_required', 'rejected'];
-        return request.auth != null && request.auth.uid == uid && p.accountType in ['tourist', 'driver']
+        return deletionAccessAllowed() && request.auth.uid == uid && p.accountType in ['tourist', 'driver']
           && (upgrade || p.accountType == 'driver' || kind != 'driving_licence')
           && p.get('applicationRevision', -1) + 1 == int(revision)
           && (upgrade || p.get('registrationStatus', '') in ['draft', 'correction_required', 'rejected']);
@@ -54,7 +57,7 @@ service firebase.storage {
           && int(m.width) >= 400 && int(m.width) <= edge
           && int(m.height) >= 400 && int(m.height) <= edge;
       }
-      allow get: if request.auth != null && (request.auth.uid == uid
+      allow get: if deletionAccessAllowed() && (request.auth.uid == uid
         || ('admin' in request.auth.token && request.auth.token.admin == true));
       // Append-only objects. Replacement uses a fresh random name; historical evidence cannot be edited/deleted.
       allow write: if request.resource != null && resource == null && applicant() && validImage();
@@ -64,7 +67,11 @@ service firebase.storage {
       function applicant() {
         let p = firestore.get(/databases/(default)/documents/users/$(uid)).data;
         let payment = firestore.get(/databases/(default)/documents/users/$(uid)/payments/$(paymentId)).data;
+        // Reuse this profile read to stay within the two-document Storage lookup budget.
+        // deletionStatus is backend-only and existing workers cannot clear it.
         return request.auth != null && request.auth.uid == uid && p.accountType == 'driver'
+          && !(p.get('deletionStatus', '') in ['approved', 'completed'])
+          && p.get('accountStatus', '') != 'deleted'
           && p.get('registrationStatus', 'approved') == 'approved'
           && p.get('currentRegistrationPaymentId', '') == paymentId
           && payment.paymentType == 'registration' && payment.status == 'pending' && payment.claimSubmitted == false;
@@ -78,7 +85,7 @@ service firebase.storage {
           && m.ownerUid == uid && m.paymentId == paymentId && m.evidenceType == 'payment_slip'
           && int(m.width) >= 400 && int(m.height) >= 400 && int(m.width) <= 2000 && int(m.height) <= 2000;
       }
-      allow get: if request.auth != null && (request.auth.uid == uid || request.auth.token.get('admin', false) == true);
+      allow get: if deletionAccessAllowed() && (request.auth.uid == uid || request.auth.token.get('admin', false) == true);
       allow write: if request.resource != null && resource == null && applicant() && validImage();
       allow list: if false;
     }

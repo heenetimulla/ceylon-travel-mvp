@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../auth/account_screen.dart';
 import '../auth/session_navigation.dart';
 import '../../core/services/driver_administration_service.dart';
 import '../../core/widgets/app_components.dart';
@@ -25,6 +26,9 @@ class _DriverRegistrationStatusScreenState extends State<DriverRegistrationStatu
         return const Center(child: Text('Sign in to your driver account.'));
       }
       return ListView(padding: appPagePadding(context), children: [DriverAdministrationPanel(
-        key: ValueKey(snapshot.data), uid: widget.uid, admin: false, service: _service)]);
+        key: ValueKey(snapshot.data), uid: widget.uid, admin: false, service: _service),
+        TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute<void>(
+          builder: (_) => const AccountScreen())), child: const Text('Account & Support')),
+      ]);
     }));
 }

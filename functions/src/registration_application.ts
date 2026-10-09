@@ -76,6 +76,9 @@ export async function processRegistrationOperation(db: Firestore, uid: string, o
       requireValue(op.actorUid === actor.uid && op.action === initial.action, "permission-denied", "Application operation changed.");
       const userRef = db.doc(`users/${uid}`), appRef = db.doc(`registration_applications/${uid}`);
       const user = (await tx.get(userRef)).data(), previous = (await tx.get(appRef)).data();
+      requireValue(!(await tx.get(db.doc(`account_deletion_blocks/${uid}`))).exists &&
+        !(await tx.get(db.doc(`account_deletion_blocks/${actor.uid}`))).exists,
+        "account-deletion", "Account deletion prevents this operation.");
       requireValue(user && ["tourist", "driver"].includes(user.accountType) &&
         (user.registrationStatus != null || startingUpgrade || previous?.purpose === "driver_upgrade"),
         "invalid-account", "This account requires operator assistance before applying.");
