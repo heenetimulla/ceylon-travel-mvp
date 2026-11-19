@@ -245,17 +245,30 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: AdminDashboardScreen(service: service)));
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(service.loads, 0);
+      expect(find.byType(AdminStatCard), findsNothing);
+      expect(find.text('Account deletion requests'), findsNothing);
       access.add(const AdminAccess(AdminAccessStatus.allowed, uid: 'admin'));
       await pumpAdmin(tester);
       expect(service.loads, 1);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(find.byType(AdminStatCard), findsNothing);
+      expect(find.text('Account deletion requests'), findsNothing);
       result.complete(const AdminDashboardData(stats: stats, recentSupport: []));
       await pumpAdmin(tester);
-      expect(find.byType(AdminStatCard), findsWidgets);
+      // Stage 17A adds another menu card above the lazily laid-out statistics.
+      // Only scroll after the real overview future has completed.
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Account deletion requests'), findsOneWidget);
+      for (final entry in stats.cards.entries) {
+        final card = find.byWidgetPredicate((widget) =>
+          widget is AdminStatCard && widget.label == entry.key);
+        await tester.scrollUntilVisible(card, 200, scrollable: find.byType(Scrollable).first);
+        expect(tester.widget<AdminStatCard>(card).value, entry.value);
+      }
       access.add(const AdminAccess(AdminAccessStatus.signedOut));
       await pumpAdmin(tester);
       expect(find.byType(AdminStatCard), findsNothing);
+      expect(find.text('Account deletion requests'), findsNothing);
     } finally {
       await cleanup();
     }

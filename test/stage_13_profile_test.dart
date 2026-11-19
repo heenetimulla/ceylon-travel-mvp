@@ -90,6 +90,19 @@ void main() {
     await session.controller.close();
   });
 
+  testWidgets('profile exposes the account deletion entry without loading its destination', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: ProfileSettingsScreen(service: service)));
+    await tester.pump();
+    final entry = find.widgetWithText(ListTile, 'Delete Account');
+    await reveal(tester, entry);
+    expect(entry, findsOneWidget);
+    expect(tester.widget<ListTile>(entry).onTap, isNotNull);
+    expect(store.writes, isEmpty);
+    expect(session.reauthCalls, 0);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   test('own profile uses Auth email and details update has a fixed field boundary', () async {
     final profile = await service.load();
     expect(profile.loginEmail, 'login@example.test');

@@ -6,31 +6,35 @@ import '../../core/widgets/admin_access_gate.dart';
 import '../../core/widgets/app_components.dart';
 
 class AdminDeletionRequestsScreen extends StatefulWidget {
-  const AdminDeletionRequestsScreen({super.key});
+  const AdminDeletionRequestsScreen({super.key, this.admin, this.service});
+  final AdminService? admin;
+  final AccountDeletionService? service;
   @override
   State<AdminDeletionRequestsScreen> createState() => _AdminDeletionRequestsScreenState();
 }
 class _AdminDeletionRequestsScreenState extends State<AdminDeletionRequestsScreen> {
-  final _admin = AdminService();
+  late final _admin = widget.admin ?? AdminService();
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: const AppPageAppBar(title: Text('Account deletion requests')),
-    body: AdminAccessGate(service: _admin, builder: (_, uid) => const _DeletionQueue()),
+    body: AdminAccessGate(service: _admin, builder: (_, uid) => _DeletionQueue(admin: _admin, service: widget.service)),
   );
 }
 class _DeletionQueue extends StatefulWidget {
-  const _DeletionQueue();
+  const _DeletionQueue({required this.admin, this.service});
+  final AdminService admin;
+  final AccountDeletionService? service;
   @override
   State<_DeletionQueue> createState() => _DeletionQueueState();
 }
 class _DeletionQueueState extends State<_DeletionQueue> {
-  final _service = AccountDeletionService();
+  late final _service = widget.service ?? AccountDeletionService();
   String _status = 'pending';
   DocumentSnapshot<Map<String, dynamic>>? _cursor;
   late Stream<QuerySnapshot<Map<String, dynamic>>> _stream = _query();
   Stream<QuerySnapshot<Map<String, dynamic>>> _query() {
     Query<Map<String, dynamic>> query = _service.db.collection('account_deletion_requests')
-      .where('status', isEqualTo: _status).orderBy(FieldPath.documentId()).limit(30);
+      .where('status', isEqualTo: _status).orderBy(FieldPath.documentId).limit(30);
     if (_cursor != null) { query = query.startAfterDocument(_cursor!); }
     return query.snapshots();
   }
@@ -57,7 +61,7 @@ class _DeletionQueueState extends State<_DeletionQueue> {
             subtitle: Text(deletionStatusLabel(doc.data()['status'] as String)),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(context, MaterialPageRoute<void>(
-              builder: (_) => _DeletionDetailScreen(uid: doc.id))))),
+              builder: (_) => _DeletionDetailScreen(uid: doc.id, admin: widget.admin, service: _service))))),
           if (_cursor != null) TextButton(onPressed: _refresh, child: const Text('First page')),
           if (docs.length == 30) TextButton(onPressed: () => _refresh(cursor: docs.last),
             child: const Text('Next page')),
@@ -66,28 +70,31 @@ class _DeletionQueueState extends State<_DeletionQueue> {
   ]);
 }
 class _DeletionDetailScreen extends StatefulWidget {
-  const _DeletionDetailScreen({required this.uid});
+  const _DeletionDetailScreen({required this.uid, required this.admin, required this.service});
+  final AdminService admin;
+  final AccountDeletionService service;
   final String uid;
   @override
   State<_DeletionDetailScreen> createState() => _DeletionDetailScreenState();
 }
 class _DeletionDetailScreenState extends State<_DeletionDetailScreen> {
-  final _admin = AdminService();
+  late final _admin = widget.admin;
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: const AppPageAppBar(title: Text('Review deletion request')),
     body: AdminAccessGate(service: _admin, builder: (_, adminUid) =>
-      _DeletionReview(uid: widget.uid, adminUid: adminUid)),
+      _DeletionReview(uid: widget.uid, adminUid: adminUid, service: widget.service)),
   );
 }
 class _DeletionReview extends StatefulWidget {
-  const _DeletionReview({required this.uid, required this.adminUid});
+  const _DeletionReview({required this.uid, required this.adminUid, required this.service});
+  final AccountDeletionService service;
   final String uid, adminUid;
   @override
   State<_DeletionReview> createState() => _DeletionReviewState();
 }
 class _DeletionReviewState extends State<_DeletionReview> {
-  final _service = AccountDeletionService();
+  late final _service = widget.service;
   final _note = TextEditingController();
   final _userMessage = TextEditingController();
   late final _stream = _service.request(widget.uid).snapshots();
@@ -143,7 +150,7 @@ class _DeletionReviewState extends State<_DeletionReview> {
         const Text('Primary administrator review only. Resolve operational obligations before approval. '
           'Support staff cannot approve or complete deletion. Do not copy identity evidence here.'),
         if (status == 'approved') Text('Processing: ${data['processingStage'] ?? 'pending'}'),
-        if (canReview || status == 'approved') ...[
+        if (canReview || (status == 'approved' && widget.uid != widget.adminUid)) ...[
           TextField(controller: _note, enabled: !_busy, maxLength: 1000, maxLines: 3,
             decoration: const InputDecoration(labelText: 'Private admin note (not shown to requester)')),
           if (canReview) TextField(controller: _userMessage, enabled: !_busy, maxLength: 500, maxLines: 3,

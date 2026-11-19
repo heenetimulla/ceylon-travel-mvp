@@ -127,7 +127,7 @@ class AuthServiceException implements Exception {
       case 'network-request-failed':
         return 'Check your internet connection and try again.';
       case 'requires-recent-login':
-        return 'Please sign in again before changing your phone number.';
+        return 'Please sign in again before making this account change.';
       default:
         return exception.message ?? 'Authentication failed. Please try again.';
     }

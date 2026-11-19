@@ -6,12 +6,13 @@ import '../../core/widgets/app_components.dart';
 import '../support/support_screens.dart';
 
 class AccountDeletionScreen extends StatefulWidget {
-  const AccountDeletionScreen({super.key});
+  const AccountDeletionScreen({super.key, this.service});
+  final AccountDeletionService? service;
   @override
   State<AccountDeletionScreen> createState() => _AccountDeletionScreenState();
 }
 class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
-  final _service = AccountDeletionService();
+  late final _service = widget.service ?? AccountDeletionService();
   final _password = TextEditingController();
   final _reason = TextEditingController();
   late final String? _uid;
@@ -23,7 +24,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
   void initState() {
     super.initState();
     _uid = _service.auth.currentUser?.uid;
-    _request = _uid == null ? null : _service.request(_uid!).snapshots();
+    _request = _uid == null ? null : _service.request(_uid).snapshots();
     _session = _service.auth.authStateChanges().listen((user) {
       if (user?.uid != _uid && mounted) {
         _password.clear(); _reason.clear();
@@ -41,7 +42,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
     if (!_confirmed || _uid == null || _busy) { return; }
     setState(() { _busy = true; _error = null; });
     try {
-      await _service.submit(_uid!, _password.text, _reason.text);
+      await _service.submit(_uid, _password.text, _reason.text);
       if (mounted) { setState(() { _confirmed = false; _reason.clear(); }); }
     } catch (error) {
       if (mounted) { setState(() { _error = deletionError(error); }); }
