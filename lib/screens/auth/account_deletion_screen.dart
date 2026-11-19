@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/account_deletion_service.dart';
 import '../../core/widgets/app_components.dart';
@@ -16,7 +15,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
   final _password = TextEditingController();
   final _reason = TextEditingController();
   late final String? _uid;
-  late final Stream<DocumentSnapshot<Map<String, dynamic>>>? _request;
+  late final Stream<AccountDeletionData>? _request;
   late final StreamSubscription<Object?> _session;
   bool _invalidated = false, _confirmed = false, _busy = false;
   String? _error;
@@ -24,7 +23,7 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
   void initState() {
     super.initState();
     _uid = _service.auth.currentUser?.uid;
-    _request = _uid == null ? null : _service.request(_uid).snapshots();
+    _request = _uid == null ? null : _service.watchRequest(_uid);
     _session = _service.auth.authStateChanges().listen((user) {
       if (user?.uid != _uid && mounted) {
         _password.clear(); _reason.clear();
@@ -56,14 +55,14 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
     body: _uid == null || _invalidated
       ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text(
         'Your session has ended. After approval, account access is disabled while deletion is processed.')))
-      : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(stream: _request, builder: (context, snapshot) {
+      : StreamBuilder<AccountDeletionData>(stream: _request, builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const Center(child: Padding(padding: EdgeInsets.all(24), child: Text(
             'Status is unavailable. Check your connection. Approved requests disable sign-in; contact support for follow-up.')));
         }
         if (!snapshot.hasData) { return const Center(child: CircularProgressIndicator()); }
-        final data = snapshot.data!.data();
-        final status = data?['status'] as String? ?? 'not_requested';
+        final data = snapshot.data!;
+        final status = data['status'] as String? ?? 'not_requested';
         final canSubmit = ['not_requested', 'rejected', 'needs_clarification'].contains(status);
         return ListView(padding: appPagePadding(context), children: [
           Text(deletionStatusLabel(status), style: Theme.of(context).textTheme.titleLarge),
@@ -78,8 +77,8 @@ class _AccountDeletionScreenState extends State<AccountDeletionScreen> {
           const SizedBox(height: 12),
           const Text('You can follow the request here while signed in. After access is disabled, '
             'follow-up requires support; completed accounts cannot sign in to view this page.'),
-          if ((data?['userMessage'] as String? ?? '').isNotEmpty) ...[
-            const SizedBox(height: 12), Text(data!['userMessage'] as String),
+          if ((data['userMessage'] as String? ?? '').isNotEmpty) ...[
+            const SizedBox(height: 12), Text(data['userMessage'] as String),
           ],
           if (status == 'needs_clarification' || status == 'rejected') ...[
             const SizedBox(height: 12),

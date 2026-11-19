@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../core/services/account_deletion_service.dart';
 import '../../core/services/admin_service.dart';
@@ -30,15 +29,10 @@ class _DeletionQueue extends StatefulWidget {
 class _DeletionQueueState extends State<_DeletionQueue> {
   late final _service = widget.service ?? AccountDeletionService();
   String _status = 'pending';
-  DocumentSnapshot<Map<String, dynamic>>? _cursor;
-  late Stream<QuerySnapshot<Map<String, dynamic>>> _stream = _query();
-  Stream<QuerySnapshot<Map<String, dynamic>>> _query() {
-    Query<Map<String, dynamic>> query = _service.db.collection('account_deletion_requests')
-      .where('status', isEqualTo: _status).orderBy(FieldPath.documentId).limit(30);
-    if (_cursor != null) { query = query.startAfterDocument(_cursor!); }
-    return query.snapshots();
-  }
-  void _refresh({String? status, DocumentSnapshot<Map<String, dynamic>>? cursor}) => setState(() {
+  String? _cursor;
+  late Stream<List<AccountDeletionData>> _stream = _query();
+  Stream<List<AccountDeletionData>> _query() => _service.watchRequests(_status, afterUid: _cursor);
+  void _refresh({String? status, String? cursor}) => setState(() {
     _status = status ?? _status; _cursor = cursor; _stream = _query();
   });
   @override
@@ -48,22 +42,22 @@ class _DeletionQueueState extends State<_DeletionQueue> {
       items: ['pending', 'needs_clarification', 'approved', 'rejected', 'completed'].map((status) =>
         DropdownMenuItem(value: status, child: Text(deletionStatusLabel(status)))).toList(),
       onChanged: (value) { if (value != null) { _refresh(status: value); } })),
-    Expanded(child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(stream: _stream,
+    Expanded(child: StreamBuilder<List<AccountDeletionData>>(stream: _stream,
       builder: (context, snapshot) {
         if (snapshot.hasError) { return Center(child: TextButton(
           onPressed: _refresh, child: const Text('Queue unavailable. Retry'))); }
         if (!snapshot.hasData) { return const Center(child: CircularProgressIndicator()); }
-        final docs = snapshot.data!.docs;
+        final docs = snapshot.data!;
         return ListView(padding: appPagePadding(context), children: [
           if (docs.isEmpty) const Text('No requests on this page.'),
           for (final doc in docs) Card(child: ListTile(
-            title: Text('Account: ${doc.id}'),
-            subtitle: Text(deletionStatusLabel(doc.data()['status'] as String)),
+            title: Text('Account: ${doc['uid']}'),
+            subtitle: Text(deletionStatusLabel(doc['status'] as String)),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(context, MaterialPageRoute<void>(
-              builder: (_) => _DeletionDetailScreen(uid: doc.id, admin: widget.admin, service: _service))))),
+              builder: (_) => _DeletionDetailScreen(uid: doc['uid'] as String, admin: widget.admin, service: _service))))),
           if (_cursor != null) TextButton(onPressed: _refresh, child: const Text('First page')),
-          if (docs.length == 30) TextButton(onPressed: () => _refresh(cursor: docs.last),
+          if (docs.length == 30) TextButton(onPressed: () => _refresh(cursor: docs.last['uid'] as String),
             child: const Text('Next page')),
         ]);
       })),
@@ -97,7 +91,7 @@ class _DeletionReviewState extends State<_DeletionReview> {
   late final _service = widget.service;
   final _note = TextEditingController();
   final _userMessage = TextEditingController();
-  late final _stream = _service.request(widget.uid).snapshots();
+  late final _stream = _service.watchRequest(widget.uid);
   bool _busy = false;
   String? _message;
   @override
@@ -130,18 +124,17 @@ class _DeletionReviewState extends State<_DeletionReview> {
     }
   }
   @override
-  Widget build(BuildContext context) => StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+  Widget build(BuildContext context) => StreamBuilder<AccountDeletionData>(
     stream: _stream, builder: (context, snapshot) {
       if (snapshot.hasError) { return const Center(child: Text('Unable to load this request. Reopen to retry.')); }
       if (!snapshot.hasData) { return const Center(child: CircularProgressIndicator()); }
-      final data = snapshot.data!.data();
-      if (data == null) { return const Center(child: Text('Request unavailable.')); }
+      final data = snapshot.data!;
       final status = data['status'] as String;
       final canReview = ['pending', 'needs_clarification'].contains(status) && widget.uid != widget.adminUid;
       return ListView(padding: appPagePadding(context), children: [
         Text('Account: ${widget.uid}'),
         Text(deletionStatusLabel(status), style: Theme.of(context).textTheme.titleLarge),
-        if (data['requestedAt'] is Timestamp) Text('Requested: ${(data['requestedAt'] as Timestamp).toDate().toLocal()}'),
+        if (data['requestedAt'] is DateTime) Text('Requested: ${(data['requestedAt'] as DateTime).toLocal()}'),
         const SizedBox(height: 16),
         Text('Requester reason: ${data['reason'] ?? ''}'),
         if ((data['userMessage'] as String? ?? '').isNotEmpty)

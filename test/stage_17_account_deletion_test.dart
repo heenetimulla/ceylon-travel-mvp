@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -19,6 +18,68 @@ Future<void> _pump(WidgetTester tester) async {
   await tester.pump();
   await tester.pump();
 }
+
+class _Store implements AccountDeletionStore {
+  final records = <String, Data>{};
+  final writes = <(String, Data)>[];
+  final changes = StreamController<void>.broadcast();
+  int reads = 0;
+  int sequence = 0;
+
+  @override
+  Stream<Data> watchRequest(String uid) async* {
+    reads++;
+    yield records['account_deletion_requests/$uid'] ?? <String, dynamic>{};
+    await for (final _ in changes.stream) {
+      yield records['account_deletion_requests/$uid'] ?? <String, dynamic>{};
+    }
+  }
+
+  @override
+  Stream<List<Data>> watchRequests(String status, {String? afterUid}) async* {
+    reads++;
+    yield [
+      for (final entry in records.entries)
+        if (entry.key.startsWith('account_deletion_requests/') && entry.value['status'] == status)
+          {'uid': entry.key.split('/').last, ...entry.value},
+    ];
+    await for (final _ in changes.stream) {
+      yield [
+        for (final entry in records.entries)
+          if (entry.key.startsWith('account_deletion_requests/') && entry.value['status'] == status)
+            {'uid': entry.key.split('/').last, ...entry.value},
+      ];
+    }
+  }
+
+  @override
+  Future<void> submitRequest(String uid, String reason) async {
+    final path = 'account_deletion_requests/$uid';
+    final current = records[path];
+    if (current != null && !['rejected', 'needs_clarification'].contains(current['status'])) {
+      throw StateError('A deletion request is already being processed.');
+    }
+    final data = current == null
+      ? {'requesterUid': uid, 'status': 'pending', 'reason': reason, 'requestedAt': DateTime.now(), 'updatedAt': DateTime.now(), 'revision': 1,
+          'reviewedBy': null, 'completionAt': null, 'processingStage': null, 'userMessage': null}
+      : {...current, 'status': 'pending', 'reason': reason, 'revision': (current['revision'] as int) + 1};
+    _save(path, data);
+  }
+
+  @override
+  Future<void> enqueueReview(String uid, int revision, Data operation) async {
+    final path = 'account_deletion_requests/$uid/operations/op${++sequence}';
+    // The client only queues the operation. A trusted backend worker later
+    // transitions it to succeeded or failed.
+    _save(path, operation);
+  }
+
+  void _save(String path, Data data) {
+    writes.add((path, Map.of(data)));
+    records[path] = Map.of(data);
+    changes.add(null);
+  }
+}
 Future<void> _reveal(WidgetTester tester, Finder finder) async {
   await tester.scrollUntilVisible(finder, 180, scrollable: find.byType(Scrollable).first);
   await tester.ensureVisible(finder);
@@ -34,7 +95,7 @@ void main() {
     store = _Store();
     user = _User('owner');
     auth = _Auth(user);
-    service = AccountDeletionService(firestore: store, auth: auth);
+    service = AccountDeletionService(store: store, auth: auth);
   });
   tearDown(() async {
     await auth.changes.close();
@@ -267,128 +328,4 @@ class _Token implements IdTokenResult {
   final Data claims;
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-class _Store implements FirebaseFirestore {
-  final records = <String, Data>{};
-  final writes = <(String, Data)>[];
-  final changes = StreamController<void>.broadcast();
-  int reads = 0, sequence = 0;
-  @override
-  CollectionReference<Data> collection(String path) => _Collection(this, path);
-  @override
-  Future<T> runTransaction<T>(TransactionHandler<T> transactionHandler, {
-    Duration timeout = const Duration(seconds: 30), int maxAttempts = 5,
-  }) async {
-    final tx = _Transaction(this);
-    final result = await transactionHandler(tx);
-    for (final entry in tx.pending) { save(entry.$1, entry.$2); }
-    return result;
-  }
-  void save(String path, Data data) {
-    writes.add((path, Map.of(data)));
-    records[path] = Map.of(data);
-    changes.add(null);
-  }
-  Stream<DocumentSnapshot<Data>> watch(String path) async* {
-    reads++;
-    yield _Snapshot(path, records[path]);
-    await for (final _ in changes.stream) { yield _Snapshot(path, records[path]); }
-  }
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-class _Transaction implements Transaction {
-  _Transaction(this.store);
-  final _Store store;
-  final pending = <(String, Data)>[];
-  @override
-  Future<DocumentSnapshot<T>> get<T extends Object?>(DocumentReference<T> documentReference) async =>
-    _Snapshot(documentReference.path, store.records[documentReference.path]) as DocumentSnapshot<T>;
-  @override
-  Transaction set<T>(DocumentReference<T> documentReference, T data, [SetOptions? options]) {
-    pending.add((documentReference.path, Map<String, dynamic>.from(data as Map)));
-    return this;
-  }
-  @override
-  Transaction update(DocumentReference documentReference, Map<Object, Object?> data) {
-    pending.add((documentReference.path, {
-      ...store.records[documentReference.path]!, ...data.map((key, value) => MapEntry(key as String, value)),
-    }));
-    return this;
-  }
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-class _Doc implements DocumentReference<Data> {
-  _Doc(this.store, this.path);
-  final _Store store;
-  @override
-  final String path;
-  @override
-  String get id => path.split('/').last;
-  @override
-  CollectionReference<Data> collection(String collectionPath) => _Collection(store, '$path/$collectionPath');
-  @override
-  Future<void> set(Data data, [SetOptions? options]) async {
-    store.save(path, data);
-    // Simulated worker acknowledgement only; no request state is changed by the fake.
-    if (path.contains('/operations/')) { store.records[path] = {...data, 'status': 'succeeded'}; }
-  }
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    if (invocation.memberName == #snapshots) { return store.watch(path); }
-    return super.noSuchMethod(invocation);
-  }
-}
-class _Snapshot implements DocumentSnapshot<Data> {
-  _Snapshot(this.path, this.value);
-  final String path;
-  final Data? value;
-  @override
-  String get id => path.split('/').last;
-  @override
-  bool get exists => value != null;
-  @override
-  Data? data() => value == null ? null : Map.of(value!);
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-class _QueryDoc extends _Snapshot implements QueryDocumentSnapshot<Data> {
-  _QueryDoc(String path, Data value) : super(path, value);
-  @override
-  Data data() => Map.of(value!);
-}
-class _QuerySnapshot implements QuerySnapshot<Data> {
-  _QuerySnapshot(this.docs);
-  @override
-  final List<QueryDocumentSnapshot<Data>> docs;
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-class _Collection implements CollectionReference<Data> {
-  _Collection(this.store, this.path, [this.status]);
-  final _Store store;
-  @override
-  final String path;
-  final String? status;
-  @override
-  DocumentReference<Data> doc([String? path]) => _Doc(store, '${this.path}/${path ?? 'op${++store.sequence}'}');
-  Stream<QuerySnapshot<Data>> watch() async* {
-    store.reads++;
-    yield _QuerySnapshot([
-      for (final entry in store.records.entries)
-        if (entry.key.startsWith('$path/') && entry.key.split('/').length == path.split('/').length + 1 &&
-            (status == null || entry.value['status'] == status))
-          _QueryDoc(entry.key, entry.value),
-    ]);
-  }
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    if (invocation.memberName == #where) {
-      return _Collection(store, path, invocation.namedArguments[#isEqualTo] as String?);
-    }
-    if ([#orderBy, #limit, #startAfterDocument].contains(invocation.memberName)) { return this; }
-    if (invocation.memberName == #snapshots) { return watch(); }
-    return super.noSuchMethod(invocation);
-  }
 }
