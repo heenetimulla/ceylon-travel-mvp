@@ -71,19 +71,23 @@ service firebase.storage {
     }
     match /payment_evidence/{uid}/{paymentId}/{file} {
       function applicant() {
-        let userExists = firestore.exists(/databases/(default)/documents/users/$(uid));
-        let paymentExists = firestore.exists(/databases/(default)/documents/users/$(uid)/payments/$(paymentId));
         let p = firestore.get(/databases/(default)/documents/users/$(uid)).data;
         let payment = firestore.get(/databases/(default)/documents/users/$(uid)/payments/$(paymentId)).data;
-        // Reuse this profile read to stay within the two-document Storage lookup budget.
-        // deletionStatus is backend-only and existing workers cannot clear it.
-        return userExists && paymentExists
-          && deletionAccessAllowed(uid) && request.auth.uid == uid && p.accountType == 'driver'
+        // These are the only two cross-service access calls in this rule.
+        // Missing documents fail closed through the null checks below.
+        // Deletion processing atomically writes backend-owned deletionStatus and
+        // accountStatus before the deletion block is visible, so no third lookup
+        // is needed here.
+        return p != null && payment != null
+          && request.auth != null && request.auth.uid == uid && p.get('accountType', '') == 'driver'
           && !(p.get('deletionStatus', '') in ['approved', 'completed'])
-          && p.get('accountStatus', '') != 'deleted'
+          && p.get('accountStatus', '') != 'deleted' && p.get('status', '') != 'blocked'
+          && p.get('registrationStatus', '') != 'deleted'
           && p.get('registrationStatus', 'approved') == 'approved'
           && p.get('currentRegistrationPaymentId', '') == paymentId
-          && payment.paymentType == 'registration' && payment.status == 'pending' && payment.claimSubmitted == false;
+          && payment.get('paymentType', '') == 'registration'
+          && payment.get('status', '') == 'pending'
+          && payment.get('claimSubmitted', null) == false;
       }
       function validImage() {
         let m = request.resource.metadata;

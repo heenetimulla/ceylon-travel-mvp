@@ -17,7 +17,7 @@ function endpoint(name) {
   const [host, port] = value.split(':'); return {host, port: Number(port)};
 }
 before(async () => {
-  env = await initializeTestEnvironment({projectId: 'demo-ceylon-upgrade-storage',
+  env = await initializeTestEnvironment({projectId: 'demo-ceylon-travel',
     firestore: {...endpoint('FIRESTORE_EMULATOR_HOST'), rules: await readFile(new URL('../firestore.rules', import.meta.url), 'utf8')},
     storage: {...endpoint('FIREBASE_STORAGE_EMULATOR_HOST'), rules: await readFile(new URL('../storage.rules', import.meta.url), 'utf8')},
   });
